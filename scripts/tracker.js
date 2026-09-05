@@ -581,9 +581,13 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
     ...base,
     vitalityLevelText: getVitalityLevelText(base.vitalityLevel),
     psyStressLevelText: getPsyStressLevelText(base.psyStressLevel),
-    // 激素画像层：阶段进度文本 + 阶段键（黄体期分早晚段），随 tracker 每轮重算
+    // 激素画像层：阶段进度文本 + 阶段键（黄体/卵泡/月经分早晚段），随 tracker 每轮重算
     stageProgressText: formatStageProgress(profile),
     hormonePhase: getHormonePhaseKey(base.stage, base.days, estimatePromptStageLimit(base, profile)),
+    // 哺乳期：断奶窗口倒计时（用进废退）——bio 即将删除，先把派生值捞出来
+    ...(String(base.stage) === '哺乳期' ? {
+      lactationDaysLeft: Math.max(0, Math.round((Number(profile?.bio?.lactationDays) || 45) - (Number(base.daysSinceMilkRelief) || 0))),
+    } : {}),
   };
 
   if (!sendPregnantState) {
@@ -622,7 +626,6 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
     hunger: metabolism.hunger ?? 0,
     sleep: metabolism.sleep ?? 0,
     milk: metabolism.milk ?? 0,
-    odor: metabolism.odor ?? 0,
     companionship: metabolism.companionship ?? 0,
   };
 

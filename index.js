@@ -1819,7 +1819,6 @@ const METABOLISM_NEED_LABELS = Object.freeze({
   hunger: '饿意',
   sleep: '困意',
   milk: '乳意',
-  odor: '臭意',
   companionship: '伴意',
 });
 
@@ -1828,7 +1827,6 @@ const DEBUG_BLOCKAGE_LABELS = Object.freeze({
   hunger: '饿意',
   sleep: '困意',
   milk: '乳意',
-  odor: '臭意',
   companionship: '伴意',
 });
 
@@ -1837,7 +1835,6 @@ const DEBUG_BLOCKAGE_DEFAULT_SEVERITY = Object.freeze({
   hunger: 0.55,
   sleep: 0.55,
   milk: 0.55,
-  odor: 0.45,
   companionship: 0.55,
 });
 
@@ -1877,12 +1874,11 @@ function getMetabolismSummary(metabolism = {}, immune = {}, blockage = null, acc
     sleep: normalizeMetabolismNeed('sleep', metabolism, blockage, acceleration, expansion),
     excretion: normalizeMetabolismNeed('excretion', metabolism, blockage, acceleration, expansion),
     milk: normalizeMetabolismNeed('milk', metabolism, blockage, acceleration, expansion),
-    odor: normalizeMetabolismNeed('odor', metabolism, blockage, acceleration, expansion),
     companionship: normalizeMetabolismNeed('companionship', metabolism, blockage, acceleration, expansion),
   };
 }
 
-const METABOLISM_DISPLAY_ORDER = Object.freeze(['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship']);
+const METABOLISM_DISPLAY_ORDER = Object.freeze(['excretion', 'hunger', 'sleep', 'milk', 'companionship']);
 
 function getMetabolismNeedItems(summary) {
   if (!summary || typeof summary !== 'object') return [];
