@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import * as host from '../scripts/host.js';
 import * as state from '../scripts/state.js';
-import * as raceConfig from '../scripts/race_config.js';
 import * as skillConfig from '../scripts/skill_config.js';
 import { getTrackerToolDefinitions, isFailedAutoRetryBlocked } from '../scripts/tracker.js';
 import { buildTrackerSystemPrompt } from '../scripts/tracker_prompt_context.js';
@@ -695,27 +694,6 @@ test('skill tool and inheritance guidance are always available to tracker', () =
   const prompt = buildTrackerSystemPrompt('', null, {});
   assert.equal(prompt.includes('[skills / talents]'), true);
   assert.equal(prompt.includes('第二与第三产程禁止传递'), true);
-});
-
-test('derived type overrides affect base types and custom subtypes', () => {
-  raceConfig.setDerivedTypeOverrides({
-    不死: {
-      introductionLine: '亡者衍生类型的简短说明。',
-      fluxDefinition: '自定义描述',
-      inheritanceSpeed: 3.5,
-      metabolismExemptions: ['hunger', 'sleep'],
-    },
-  });
-  assert.equal(raceConfig.getDerivedTypeFluxProfile('不死-僵尸').fluxName, '死气');
-  assert.equal(raceConfig.getDerivedTypeIntroductionLine('不死-僵尸'), '亡者衍生类型的简短说明。');
-  assert.equal(raceConfig.getDerivedTypeFluxProfile('不死').fluxDefinition, '自定义描述');
-  assert.equal(raceConfig.getDerivedTypeInheritanceProfile('不死-僵尸').inheritanceSpeed, 3.5);
-  assert.deepEqual(raceConfig.getDerivedTypeMetabolismExemptions('不死'), ['odor', 'sleep', 'milk']);
-  assert.equal(raceConfig.getDerivedTypeOverride('不死-僵尸').metabolismExemptions, undefined);
-  raceConfig.setDerivedTypeOverrides({});
-  assert.equal(raceConfig.getDerivedTypeFluxProfile('不死').fluxName, '死气');
-  // 清掉覆写后回落到内建短敘述（此前衍生类型没有内建值，一律为空）
-  assert.equal(raceConfig.getDerivedTypeIntroductionLine('不死'), 'Undead，以死气驱动躯壳的亡者，保留生前记忆但情感淡漠。');
 });
 
 test('an unhydrated blank state never overwrites an existing TauriTavern sidecar', async () => {

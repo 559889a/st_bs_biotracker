@@ -1,6 +1,4 @@
 import { callOpenAICompatible } from './api.js';
-import { buildEmbryoTypeLorePrompt } from './embryo_prompt_context.js';
-import { buildRaceCatalogBlock, buildRegistryRacePhysiologyPrompt } from './race_prompt_context.js';
 import { DEFAULT_DIARY_WRITING_PROMPT, DEFAULT_REGISTRY_DESCRIPTION_GUIDES } from './registry_config.js';
 import {
   buildEmptyPsychologyGroup,
@@ -13,11 +11,7 @@ import {
   PSY_PREG_BOOL_FIELDS,
 } from './registry_psy_config.js';
 import {
-  getEmbryoTypeByRace,
-  getMergedRacePhysiologyProfile,
-  getRaceComponents,
-  getRaceDescriptorComponents,
-  parseRaceDescriptor,
+  getHumanPhysiologyProfile,
 } from './race_config.js';
 import {
   DEFAULT_WARDROBE_PREP_PROMPT,
@@ -351,7 +345,6 @@ function sanitizePromptText(value) {
 export function buildBreedingInferenceSystemPrompt(settings, options = {}) {
   const targetName = String(options.targetName || '').trim();
   const customNotes = String(options.customNotes !== undefined ? options.customNotes : (settings?.registryCustomNotes || '')).trim();
-  const declaredRace = String(options.declaredRace || '').trim();
   const breedingInferencePrompt = String(options.breedingInferencePrompt || '').trim();
   const sourceChild = options.sourceChildContext?.child || null;
   const psyMensLines = Object.entries(PSY_MENS_FIELDS).map(([key, value]) => `- mens.${key}_value: ${value.definition}`);
@@ -368,8 +361,7 @@ export function buildBreedingInferenceSystemPrompt(settings, options = {}) {
     '如果角色当前未怀孕或没有明确初登场怀孕迹象，填写 mens；如果角色当前已怀孕、假孕、产兆前驱或产程中，填写 preg。mens 与 preg 二选一，另一项用 null。',
     '启用 mens 时，必须同时推演 isChaste 与 hasContraception；启用 preg 时，必须同时推演 knowsFatherSource 与 hasProfessionalPrenatalCare。',
     '数值范围为 0-100。0 是极端封闭/否认/失控，50 是普通中性，100 是极端掌控/执迷/展现。不要使用 100+，注册阶段只给 0-100 起始点。',
-    declaredRace ? `用户已声明角色种族倾向：${sanitizePromptText(declaredRace)}` : '',
-    sourceChild ? '本次角色来源为已出生孩子。payload.source_child 是其固定出生资料与既有天赋；必须用来判断长期人格、母子关系及成长背景，不得改写其种族或天赋。' : '',
+    sourceChild ? '本次角色来源为已出生孩子。payload.source_child 是其固定出生资料与既有天赋；必须用来判断长期人格、母子关系及成长背景，不得改写其天赋。' : '',
     customNotes ? `角色补充设定：${sanitizePromptText(customNotes)}` : '',
     breedingInferencePrompt ? `额外推演提示：${sanitizePromptText(breedingInferencePrompt)}` : '',
     'mens 字段定义：',
@@ -580,7 +572,6 @@ function getPsychologyStageProfileLabelLeaks(stageProfiles) {
 async function buildRegistryPayload(ctx, settings, chatState, options = {}) {
   const targetName = String(options.targetName || '').trim();
   const customNotes = String(options.customNotes !== undefined ? options.customNotes : (settings.registryCustomNotes || '')).trim();
-  const declaredRace = String(options.declaredRace || '').trim();
   if (!targetName) throw new Error('runRegistry 需要 targetName');
   const currentCharacter = getCharacterCard(ctx);
   const recentMessages = buildRecentMessages(ctx, settings);
@@ -633,7 +624,6 @@ async function buildRegistryPayload(ctx, settings, chatState, options = {}) {
     existing_state: chatState.characters[targetName] || null,
     recent_messages: recentMessages,
     custom_notes: customNotes,
-    declared_race: declaredRace || null,
     source_child: sourceChild,
     user_instruction: String(options.userInstruction || '').trim(),
   };
@@ -647,7 +637,6 @@ export async function runRegistryWardrobeInference(ctx, options = {}) {
   const targetName = resolveRegisteredCharacterName(chatState, requestedTargetName);
   if (!targetName) throw new Error(`备装推演需要已注册角色：${requestedTargetName}`);
   const customNotes = String(options.customNotes !== undefined ? options.customNotes : (settings.registryCustomNotes || '')).trim();
-  const declaredRace = String(options.declaredRace || '').trim();
   const wardrobePrepPrompt = String(options.wardrobePrepPrompt || settings.wardrobePrepPrompt || '').trim();
   const wardrobePrepMainCount = Math.max(1, Math.min(12, Math.floor(Number(options.wardrobePrepMainCount ?? settings.wardrobePrepMainCount ?? 3) || 3)));
   const wardrobePrepAccessoryCount = Math.max(0, Math.min(12, Math.floor(Number(options.wardrobePrepAccessoryCount ?? settings.wardrobePrepAccessoryCount ?? 3) || 0)));
@@ -656,7 +645,6 @@ export async function runRegistryWardrobeInference(ctx, options = {}) {
     targetName,
     reason: options.reason || 'wardrobe_prep_inference',
     customNotes,
-    declaredRace,
     userInstruction: wardrobePrepPrompt,
   });
   payload.wardrobe_prep_prompt = wardrobePrepPrompt;
@@ -714,16 +702,12 @@ export async function runRegistryBreedingInference(ctx, options = {}) {
   const requestedSource = options.sourceChild || null;
   const sourceChildContext = requestedSource ? resolveRegistryChildSource(chatState, requestedSource) : null;
   if (requestedSource && !sourceChildContext) throw new Error('找不到选择的孩子来源，请重新选择。');
-  const declaredRace = sourceChildContext
-    ? `${sourceChildContext.child.derivedType ? `[${sourceChildContext.child.derivedType}]` : ''}${String(sourceChildContext.child.race || '未知')}`
-    : String(options.declaredRace || '').trim();
   const breedingInferencePrompt = String(options.breedingInferencePrompt || '').trim();
   const payload = await buildRegistryPayload(ctx, settings, chatState, {
     ...options,
     targetName,
     reason: options.reason || 'breeding_inference',
     customNotes,
-    declaredRace,
     breedingInferencePrompt,
     sourceChildContext,
     userInstruction: breedingInferencePrompt,
@@ -733,7 +717,6 @@ export async function runRegistryBreedingInference(ctx, options = {}) {
     ...options,
     targetName,
     customNotes,
-    declaredRace,
     breedingInferencePrompt,
     sourceChildContext,
   });
@@ -748,12 +731,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     ...(options.descriptionGuides || {}),
   };
   const customNotes = String(options.customNotes !== undefined ? options.customNotes : (settings?.registryCustomNotes || '')).trim();
-  const declaredRace = String(options.declaredRace || '').trim();
   const sourceChild = options.payload?.source_child || null;
-  const embryoTypeLorePrompt = buildEmbryoTypeLorePrompt(options.payload || {}, { includeAllIfEmpty: true });
-  const racePhysiologyPrompt = buildRegistryRacePhysiologyPrompt(options.payload || {});
-  // 注册是一次性请求，附上辨识提示帮模型在形近种族间选对（人鱼／鱼人、精灵／妖精）
-  const raceCatalogPrompt = settings?.raceCatalogInPrompt === false ? '' : buildRaceCatalogBlock({ withHints: true });
   const psyMensLines = Object.entries(PSY_MENS_FIELDS).flatMap(([key, value]) => [
     `- psychology.mens.${key}_value: ${value.definition}`,
     `  阶段预览: ${value.preview}`,
@@ -765,48 +743,41 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
   ]);
   const psyPregBoolLines = Object.entries(PSY_PREG_BOOL_FIELDS).map(([key, value]) => `- psychology.preg.${key}: ${value.definition}`);
   const prompt = [
-    racePhysiologyPrompt,
-    raceCatalogPrompt,
     '你是 AIRP 角色注册初始化器。',
     '只在用户明确要求注册指定角色时工作，不得擅自新增其他角色。',
     '根据角色卡、用户要求、已有资料，输出角色初始化 JSON。',
-    sourceChild ? '本次注册来源为已有角色的孩子。payload.source_child 是固定事实：base.race 必须沿用其 race／derivedType；其 talents 会由系统确定性继承。你只能参考这些天赋塑造初始化内容，不得删除、改名、换向或重算天赋。' : '',
+    sourceChild ? '本次注册来源为已有角色的孩子。payload.source_child 是固定事实：其 talents 会由系统确定性继承。你只能参考这些天赋塑造初始化内容，不得删除、改名、换向或重算天赋。' : '',
     includeBreedingPsychology
       ? 'payload.breeding_inference 是已确认的繁育推演。必须优先把它当作繁育心理初稿，再结合角色资料校正，不要无故忽略。'
       : '本次未启用繁育心理推演：不要输出、补全或推断任何繁育阶段人格字段，保留角色卡原有的阶段人设与表现。',
     '你只需要填写角色注册时真正需要声明的内容，不需要补充其他无关信息。',
     '不要扩写额外分类，不要发散到注册步骤之外的内容。',
     '你只需要填写以下声明内容：',
-    '1. 角色基础注册：base.age、base.race、base.vitalityLevel、base.psyStressLevel、base.libido、base.uterinePressure、base.latestSexDays、base.sperms、metabolism',
+    '1. 角色基础注册：base.age、base.vitalityLevel、base.psyStressLevel、base.libido、base.uterinePressure、base.latestSexDays、base.sperms、metabolism',
     '2. 情感与妊娠经验：experience',
     ...(includeBreedingPsychology ? ['3. 繁育心理：psychology.mens 或 psychology.preg（二选一，互斥）'] : []),
     '4. 既有孩子记录：children',
     '5. 初登场即怀孕：pregnant.pregnantDays、pregnant.fetusesCount、pregnant.fetuses',
     '6. 文字描述栏位：descriptions',
     '如果资料不足，可以省略字段或给 null；不要为了凑完整而编造。',
-    embryoTypeLorePrompt,
     '以下字段定义、参数说明、注意事项与示例，均视为必要规则：',
     '【1. 角色基础注册】',
     '参数说明：',
-    `- base.race: 纯种/混血/衍生种族/子类物种，保留原始写法，若故事为现代写实，种族统一填人类即可${declaredRace ? `。【重要】用户已明确指定，必须强制填写為：${declaredRace}` : ''}`,
+    '- base.race: 固定为人类，无需填写。',
     '- base.vitalityLevel: 1-7，默认语义为 一推就倒(1)-身怀病弱(2)-难产体态(3)-均衡活力(4)-安产体态(5)-经过锻炼(6)-无坚不摧(7)',
     '- base.psyStressLevel: 1-7，默认语义为 情感丧失麻木不仁(1)-内向压抑冷感(2)-情绪平缓理性(3)-情绪均衡稳定(4)-情绪丰富敏感(5)-强烈波动焦躁(6)-极端情绪精神异常(7)',
     '- base.age: 角色年龄',
     '- base.libido: 初始性欲。非妊娠上限100；妊娠後会随孕期提升，临产最后一天上限可达150。若角色开场就在发情、催情、强欲状态，可给较高值。',
     '- base.uterinePressure: 初始宫压。非妊娠上限50；妊娠後会随进度平滑提升，臨產期上限达150。【危险警告】孕早期与孕中期前期上限极低，超过15便极易触发流产警告！除非开局正在临盆或剧烈腹痛，否则强烈建议填 0。',
     '- base.latestSexDays: 距最近一次性行为经过的天数。若 experience.latestSexPartner 有意义，建议一并填写；若已超过最近一月经周期或无从判断，可为 null。',
-    '- base.sperms: 体内残留精液来源列表。适用于刚性交结束、仍有精液残留的开局；每项包含 male、race、value，value 建议 10-30（每天自动衰减 10）。race 可直接写 [衍生]种族，系统会自动拆出 derivedType。',
-    '- metabolism: 初始需求状态。普通种族上限皆為150，包含 excretion、hunger、sleep、milk、odor、companionship，分别表示泄意、饿意、困意、乳意、臭意、伴意；excretion（泄意）同时包含排尿与排便需求；milk 在普通周期表示乳房胀敏或周期不适，在妊娠、假孕或产后恢复阶段也可表示泌乳需求。',
-    '- 若 base.derivedType 不为 null，则 metabolism 可填写 flux（范围 -150 到 150），并保留该衍生类型未抵免的普通需求。flux 是衍生种族专用的单一极性需求值：正值与负值分别代表两种相反的释放需求，绝对值越高需求越强。',
+    '- base.sperms: 体内残留精液来源列表。适用于刚性交结束、仍有精液残留的开局；每项包含 male、value，value 建议 10-30（每天自动衰减 10）。',
+    '- metabolism: 初始需求状态。上限皆为150，包含 excretion、hunger、sleep、milk、odor、companionship，分别表示泄意、饿意、困意、乳意、臭意、伴意；excretion（泄意）同时包含排尿与排便需求；milk 在普通周期表示乳房胀敏或周期不适，在妊娠、假孕或产后恢复阶段也可表示泌乳需求。',
     '- pregnant.nutrition 是妊娠供养力盈余/赤字，专注参与胎儿体重/供养结算，不作为 metabolism 排解阻塞来源。',
     '注意：vitalityLevel 与 psyStressLevel 是角色内在特质等级，不根据当前疲劳、刚哭过、当下崩溃等暂时状态调整。',
     '注意：base.vitality 与 base.psyStress 不由你直接填写，系统会根据 vitalityLevel 与 psyStressLevel 自动计算初始值。',
     '示例：',
-    '- 人类少女: {"base":{"race":"人类","vitalityLevel":4,"psyStressLevel":4,"age":18,"libido":12,"uterinePressure":0}}',
-    '- 混血: {"base":{"race":"天使x恶魔","vitalityLevel":5,"psyStressLevel":3,"age":25,"libido":35,"uterinePressure":3}}',
-    '- 衍生种族: {"base":{"race":"[血族]人类","vitalityLevel":2,"psyStressLevel":5,"age":150,"libido":28,"uterinePressure":0}}',
-    '- 子类物种: {"base":{"race":"鱼人-鲸族","vitalityLevel":6,"psyStressLevel":2,"age":30,"libido":20,"uterinePressure":0}}',
-    '- 复杂种族: {"base":{"race":"[不死-僵尸]兽耳族-九尾狐","vitalityLevel":7,"psyStressLevel":1,"age":1000,"libido":60,"uterinePressure":20}}',
+    '- 人类少女: {"base":{"vitalityLevel":4,"psyStressLevel":4,"age":18,"libido":12,"uterinePressure":0}}',
+    '- 成熟人妻: {"base":{"vitalityLevel":5,"psyStressLevel":3,"age":32,"libido":35,"uterinePressure":3}}',
     '【2. 情感与妊娠经验】',
     '参数说明：',
     '- virginity: 初次性对象名称，处女时为 null',
@@ -822,7 +793,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- 高中女生: {"experience":{"virginity":"前男友","emotionalMate":"{{user_name}}","pregnantExperience":0}}',
     '- 魅魔女仆: {"experience":{"virginity":"前任主人","emotionalMate":null,"pregnantExperience":5,"naturalBirthExperience":3,"surgicalBirthExperience":0,"miscarriageExperience":2}}',
     '- 守贞人妻: {"experience":{"virginity":"丈夫","latestSexPartner":"丈夫","emotionalMate":"丈夫","marriageMate":"丈夫","pregnantExperience":3,"naturalBirthExperience":0,"surgicalBirthExperience":2,"miscarriageExperience":0}}',
-    '- 刚做爱开局: {"base":{"latestSexDays":0,"sperms":[{"male":"丈夫","race":"[不死-僵尸]人类","value":30}]},"experience":{"latestSexPartner":"丈夫"}}',
+    '- 刚做爱开局: {"base":{"latestSexDays":0,"sperms":[{"male":"丈夫","value":30}]},"experience":{"latestSexPartner":"丈夫"}}',
     '【3. 繁育心理】',
     '参数说明：',
     '- 若 payload.breeding_inference 存在，先采用其中对应 mens 或 preg 的数值作为心理起始点；只有当角色资料与繁育推演明显冲突时才调整。',
@@ -843,15 +814,15 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- 非怀孕: {"psychology":{"mens":{"mastery_value":62,"desire_value":38,"autonomy_value":71,"isChaste":true,"hasContraception":true}}}',
     '- 怀孕: {"psychology":{"preg":{"cognition_value":58,"bonding_value":84,"stance_value":47,"knowsFatherSource":true,"hasProfessionalPrenatalCare":false}}}',
     '【4. 既有孩子记录】',
-    '参数说明：每个孩子对象包含 name、fathers、gender、race、age。',
+    '参数说明：每个孩子对象包含 name、fathers、gender、age。',
     '示例：',
-    '- [{"name":"冬月 露花","fathers":"前夫","gender":"女","race":"人类","age":5}]',
+    '- [{"name":"冬月 露花","fathers":"前夫","gender":"女","age":5}]',
     '【5. 初登场即怀孕】',
     '参数说明：',
-    '- pregnant.pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/本族等价周期起点计算的孕周天数；若资料写“孕8周/怀孕8周”填 56，若明确写“受孕后8周/胚胎发育8周”，需再加上本族等价排卵前偏移。',
-    '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄、角色种族妊娠速度与 bio.gestationModifierMultiplier 自动换算有效妊娠天数。',
+    '- pregnant.pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/等价周期起点计算的孕周天数；若资料写“孕8周/怀孕8周”填 56，若明确写“受孕后8周/胚胎发育8周”，需再加上等价排卵前偏移。',
+    '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄与 bio.gestationModifierMultiplier 自动换算有效妊娠天数。',
     '- pregnant.fetusesCount: 这次怀孕的怀胎数',
-    '- pregnant.fetuses: 每个胎儿包含 fathers、provider、race、gender、embryoType；也可填写 weight、tendencyAngle、affinity',
+    '- pregnant.fetuses: 每个胎儿包含 fathers、provider、gender；也可填写 weight、tendencyAngle、affinity',
     '- 胎儿可带 tags 标注特殊来历，只接受这几个：identical（同卵）、superfetation（异期复孕）、nested（孕中孕）、rebirth（胎内回归）。代孕不必标——给了 provider 就会自动识别。写不出对应支撑栏位的标签会被撤销，宁可不标也不要留一个指向虚空的关系。',
     '- 嵌合体不必标 tags——给了 chimera 就会自动识别。chimera = { sourceCount: 融合前的受精卵数, fatherSources: [父方名字…], maternalSources: [遗传母方名字…], genderSources: [各来源的性别…] }；父方与母方名字加起来不足两个会被撤销，因为那不成其为嵌合。',
     '- identical：同卵的几胎都标上即可，系统会自动把它们归为同一组；只标一胎会被撤销。',
@@ -864,16 +835,15 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- tendencyAngle: 胎位/趋向角度，范围 0-360；不确定可省略，系统会随机补值。角度映射必须固定为：0/360=正常头位/正位，180=完全臀位/倒位，90或270=横位；不要把 180 写成头位',
     '- affinity: 胎儿对母体的亲和/排斥倾向，范围 -50 到 50；正值亲和，负值排斥，不确定可省略',
     '示例：',
-    '- 人类怀单胎8周，正常头位示例: {"pregnant":{"pregnantDays":56,"fetusesCount":1,"fetuses":[{"fathers":"丈夫","provider":null,"race":"人类","gender":"男","embryoType":"胎生","weight":1.0,"tendencyAngle":0,"affinity":10}]}}',
-    '- 精灵怀孕500天: {"base":{"race":"精灵"},"pregnant":{"pregnantDays":500,"fetusesCount":1,"fetuses":[{"fathers":"伴侣","provider":null,"race":"精灵","gender":"女","embryoType":"胎生"}]}}',
-    '- 妖怪猫又怀双胎20周: {"pregnant":{"pregnantDays":140,"fetusesCount":2,"fetuses":[{"fathers":"监狱囚犯","provider":null,"race":"[妖怪]兽耳族-猫又x蜥蜴人","gender":"女","embryoType":"胎生"},{"fathers":"监狱囚犯","provider":null,"race":"[妖怪]兽耳族-猫又x蜥蜴人","gender":"女","embryoType":"胎生"}]}}',
-    '- 代孕情节: {"pregnant":{"pregnantDays":84,"fetusesCount":1,"fetuses":[{"fathers":"委托人","provider":"代孕者A","race":"人类","gender":"女","embryoType":"胎生"}]}}',
+    '- 人类怀单胎8周，正常头位示例: {"pregnant":{"pregnantDays":56,"fetusesCount":1,"fetuses":[{"fathers":"丈夫","provider":null,"gender":"男","weight":1.0,"tendencyAngle":0,"affinity":10}]}}',
+    '- 怀双胎20周: {"pregnant":{"pregnantDays":140,"fetusesCount":2,"fetuses":[{"fathers":"丈夫","provider":null,"gender":"女"},{"fathers":"丈夫","provider":null,"gender":"女"}]}}',
+    '- 代孕情节: {"pregnant":{"pregnantDays":84,"fetusesCount":1,"fetuses":[{"fathers":"委托人","provider":"代孕者A","gender":"女"}]}}',
     '【5.1 妊娠變速类补充设定（仅在存在特殊变速效果时填写 bio）】',
     '参数说明：',
     '- bio.gestationModifierMultiplier: 特殊妊娠速度修正倍率。大于 1 为加速，小于 1 为减速，0 为冻结；初始怀孕仍只填 pregnant.pregnantDays（孕龄），系统会用倍率换算 effectivePregnantDays。',
     '- bio.gestationModifierName: 该倍率效果的名称，例如祝福、诅咒、体质、术式。',
     '- bio.gestationModifierDescription: 对该倍率来源与表现的简短说明。',
-    '- 这组 bio 字段是可选的特殊效果，不是一般妊娠的必填资料。普通人类孕妇、常规妊娠、种族原生孕期速度都不要填写。',
+    '- 这组 bio 字段是可选的特殊效果，不是一般妊娠的必填资料。普通孕妇、常规妊娠都不要填写。',
     '- 禁止用 bio 填写 gestationModifierMultiplier=1 的默认占位内容，例如「常规妊娠」「标准人类妊娠生理周期」；没有特殊变速效果就整个省略 bio。',
     '- 仅当资料明确存在持续生效且倍率不为 1 的祝福、诅咒、体质、术式、冻结或延长效果时填写；未怀孕角色也可保留此类明确效果。',
     '示例：',
@@ -903,7 +873,6 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '  "profile": {',
     '    "base": {',
     '      "age": 0,',
-    '      "race": "string",',
     '      "libido": 0,',
     '      "uterinePressure": 0,',
     '      "latestSexDays": 0,',
@@ -918,9 +887,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '        {',
     '          "fathers": "string|null",',
     '          "provider": "string|null",',
-    '          "race": "string|null",',
     '          "gender": "string|null",',
-    '          "embryoType": "string|null",',
     '          "weight": 1.0,',
     '          "tendencyAngle": 0,',
     '          "affinity": 0',
@@ -1064,7 +1031,6 @@ function sanitizeChildren(value) {
   return value
     .filter((item) => item && typeof item === 'object')
     .map((item) => {
-      const parsed = parseRaceDescriptor(item.race);
       return {
         name: item.name ?? item.babyName ?? null,
         fathers: item.fathers ?? null,
@@ -1082,10 +1048,10 @@ function sanitizeChildren(value) {
           }
           : undefined,
         gender: item.gender ?? null,
-        race: parsed.race || null,
-        derivedType: item.derivedType ?? parsed.derivedType ?? null,
+        race: item.race === null || item.race === undefined ? null : String(item.race),
+        derivedType: null,
         fatherRace: item.fatherRace ?? null,
-        fatherDerivedType: item.fatherDerivedType ?? null,
+        fatherDerivedType: null,
         age: item.age ?? null,
         birthWeightRatio: Number.isFinite(Number(item.birthWeightRatio)) ? clampNumber(item.birthWeightRatio, 0.33, 3.0, 1.0) : null,
         birthAffinity: Number.isFinite(Number(item.birthAffinity)) ? clampNumber(item.birthAffinity, -50, 50, 0) : null,
@@ -1100,17 +1066,13 @@ function sanitizeRegistrySperms(value) {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const parsed = parseRaceDescriptor(item.race);
-      const derivedTypeRaw = item.derivedType === undefined ? parsed.derivedType : item.derivedType;
-      return {
-        male: item.male === null ? null : String(item.male || '').trim() || null,
-        race: parsed.race || null,
-        derivedType: derivedTypeRaw === null ? null : String(derivedTypeRaw || '').trim() || null,
-        value: clampNumber(item.value, 0, 9999, 0),
-      };
-    })
-    .filter((item) => item.male && item.race && item.value > 0);
+    .map((item) => ({
+      male: item.male === null ? null : String(item.male || '').trim() || null,
+      race: '人类',
+      derivedType: null,
+      value: clampNumber(item.value, 0, 9999, 0),
+    }))
+    .filter((item) => item.male && item.value > 0);
 }
 
 function sanitizePregnant(value) {
@@ -1119,24 +1081,16 @@ function sanitizePregnant(value) {
     ? value.fetuses
       .filter((item) => item && typeof item === 'object')
       .map((item) => {
-        const parsed = parseRaceDescriptor(item.race);
-        // race 是胎儿的完整种族（父系x母系，或纯种），模型按提示词示例填写。
-        // fatherRace 只在模型显式给出时保留；缺失时置 null，normalize 会原样信任 race，
-        // 否则代孕/移植胚胎会被硬塞进承载者的血统。
-        const explicitFatherRace = item.fatherRace !== undefined && item.fatherRace !== null
-          ? parseRaceDescriptor(item.fatherRace).race || null
-          : null;
         return {
           fathers: item.fathers ?? null,
           provider: item.provider ?? null,
-          race: parsed.race || null,
-          fatherRace: explicitFatherRace,
-          fatherDerivedType: item.fatherDerivedType ?? parsed.derivedType ?? null,
+          race: '人类',
+          fatherRace: item.fatherRace !== undefined && item.fatherRace !== null ? '人类' : null,
+          fatherDerivedType: null,
           gender: item.gender ?? null,
           embryoType: item.embryoType ?? null,
           // 嵌合体：多套来源无法从别处推导，模型不给就等于没有这回事
           chimera: sanitizeChimera(item.chimera),
-          maternalDerivedTypeProgress: Number.isFinite(Number(item.maternalDerivedTypeProgress)) ? clampNumber(item.maternalDerivedTypeProgress, -100, 100, 0) : undefined,
           weight: Number.isFinite(Number(item.weight)) ? clampNumber(item.weight, 0.33, 3.0, 1.0) : undefined,
           tendencyAngle: Number.isFinite(Number(item.tendencyAngle)) ? clampNumber(item.tendencyAngle, 0, 360, 0) : undefined,
           affinity: Number.isFinite(Number(item.affinity)) ? clampNumber(item.affinity, -50, 50, 0) : undefined,
@@ -1182,32 +1136,9 @@ function sanitizeDiaryEntries(value) {
     .filter((item) => item.time && item.content);
 }
 
-function getRegistryEmbryoTypeRecoveryCoefficient(embryoType) {
-  switch (String(embryoType || '胎生')) {
-    case '卵生':
-      return 0.6;
-    case '卵胎生':
-      return 0.4;
-    case '胎转卵生':
-      return 1.0;
-    case '不定型':
-      return 0.8;
-    case '胎生':
-    default:
-      return 0.2;
-  }
-}
-
-function deriveRegisteredFetusRace(motherRace, fatherRace) {
-  const motherParts = getRaceDescriptorComponents(motherRace);
-  const fatherParts = getRaceDescriptorComponents(fatherRace);
-  const combined = [...fatherParts, ...motherParts].filter(Boolean);
-  if (combined.length === 0) return '人类';
-  const unique = [];
-  for (const part of combined) {
-    if (!unique.includes(part)) unique.push(part);
-  }
-  return unique.join('x');
+/** 胎生恢复系数；其余胚型随种族系统移除，恒为 0.2。 */
+function getRegistryEmbryoTypeRecoveryCoefficient() {
+  return 0.2;
 }
 
 /**
@@ -1223,7 +1154,7 @@ function deriveRegisteredFetusRace(motherRace, fatherRace) {
  */
 export const SPECIAL_FETUS_HINTS = {
   chimera: '这次妊娠里要有一颗嵌合体胎儿：两颗以上的受精卵在著床前融合成一个个体。请给它 chimera = { sourceCount, fatherSources, maternalSources, genderSources }，来源名字要取自角色卡里真实存在的人，父方与母方名字合计至少两个。',
-  identical: '这次妊娠里要有一对同卵双胞胎：至少两颗胎儿都标上 tags: ["identical"]，两者的 fathers 与 race 必须一致。',
+  identical: '这次妊娠里要有一对同卵双胞胎：至少两颗胎儿都标上 tags: ["identical"]，两者的 fathers 必须一致。',
   superfetation: '这次妊娠里要有一颗异期复孕的胎儿：它在母体已经怀孕之后才受精。给它 tags: ["superfetation"] 与 conceivedAtDays（受精当下母体已怀的有效孕日，必须小于目前孕龄），它比同腹其他胎儿发育落后。',
   nested: '这次妊娠里要有一颗孕中孕的胎儿：它长在另一颗胎儿体内。给它 tags: ["nested"]、conceivedAtDays，以及 nestedInIndex＝宿主在 fetuses 阵列里的下标。宿主本身必须是一颗正常胎儿。',
 };
@@ -1352,21 +1283,13 @@ function normalizeRegisteredPregnancy(profile) {
   const pregnant = profile.pregnant || {};
   const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses.map((item) => ({ ...item })) : [];
   if (fetuses.length === 0) return;
-  const motherRace = parseRaceDescriptor(profile?.base?.race || '人类').race || '人类';
 
   pregnant.fetuses = fetuses.map((fetus) => {
-    // 只有显式给出父系时才按「父系x母系」重算；否则信任 race 原样，
-    // 避免把已完整的胎儿种族再跟承载者混一次（代孕/移植胚胎会因此被改血统）
-    const explicitFatherRace = parseRaceDescriptor(fetus?.fatherRace || '').race || null;
-    const fatherRace = explicitFatherRace;
-    const fetusRace = explicitFatherRace
-      ? (explicitFatherRace === motherRace ? motherRace : deriveRegisteredFetusRace(motherRace, explicitFatherRace))
-      : (fetus?.race ? parseRaceDescriptor(fetus.race).race || motherRace : motherRace);
     return {
       ...fetus,
-      race: fetusRace,
-      fatherRace,
-      embryoType: fetus?.embryoType || getEmbryoTypeByRace(fetusRace),
+      race: '人类',
+      fatherRace: fetus?.fatherRace ? '人类' : null,
+      embryoType: '胎生',
       weight: Number.isFinite(Number(fetus?.weight)) ? clampNumber(fetus.weight, 0.33, 3.0, 1.0) : 1.0,
       tendencyAngle: Number.isFinite(Number(fetus?.tendencyAngle)) ? clampNumber(fetus.tendencyAngle, 0, 360, 0) : randomInt(0, 360),
       affinity: Number.isFinite(Number(fetus?.affinity)) ? clampNumber(fetus.affinity, -50, 50, 0) : 0,
@@ -1442,12 +1365,8 @@ function sanitizeRegistryProfile(profile, baseProfile) {
   const sanitized = {};
   if (profile.base && typeof profile.base === 'object' && !Array.isArray(profile.base)) {
     const nextBase = {};
-    if (profile.base.race !== undefined) {
-      const parsed = parseRaceDescriptor(profile.base.race);
-      nextBase.race = parsed.race || baseProfile.base.race;
-      if (profile.base.derivedType === undefined && parsed.derivedType !== null) nextBase.derivedType = parsed.derivedType;
-    }
-    if (profile.base.derivedType !== undefined) nextBase.derivedType = profile.base.derivedType === null ? null : String(profile.base.derivedType || '').trim() || null;
+    // 种族锁死人类：模型给什么都归一到人类，derivedType 恒为 null。
+    if (profile.base.race !== undefined) nextBase.race = '人类';
     if (profile.base.age !== undefined) {
       const age = Number(profile.base.age);
       if (Number.isFinite(age)) nextBase.age = age;
@@ -1523,8 +1442,6 @@ export function applyRegistryResult(chatState, result, { allowBreedingPsychology
   const base = current && typeof current === 'object' ? current : createDefaultFemaleState(name);
   const sanitizedProfile = sanitizeRegistryProfile(result.profile, base.profile);
   if (!allowBreedingPsychology) delete sanitizedProfile.psychology;
-  const effectiveRace = sanitizedProfile.base?.race ?? base.profile.base.race;
-  const mergedRaceProfile = getMergedRacePhysiologyProfile(effectiveRace);
   const basePsychology = normalizeCharacterPsychologyState(base).profile.psychology;
   const stageProfiles = Object.keys(sanitizedProfile.psychology?.stageProfiles || {}).length > 0
     ? sanitizedProfile.psychology.stageProfiles
@@ -1588,7 +1505,7 @@ export function applyRegistryResult(chatState, result, { allowBreedingPsychology
       },
       bio: {
         ...base.profile.bio,
-        ...(mergedRaceProfile || {}),
+        ...getHumanPhysiologyProfile(),
         ...(sanitizedProfile.bio || {}),
       },
       metabolism: {
@@ -1916,12 +1833,8 @@ export async function runRegistry(ctx, options = {}) {
   if (requestedSource && !sourceChildContext) throw new Error('找不到选择的孩子来源，请重新选择。');
   if (sourceChildContext?.child?.registeredAs) throw new Error(`这个孩子已经注册为 ${sourceChildContext.child.registeredAs}。`);
   if (sourceChildContext && chatState.characters[targetName]) throw new Error(`角色名 ${targetName} 已被使用，不能覆盖为孩子角色。`);
-  const fixedChildRace = sourceChildContext
-    ? `${sourceChildContext.child.derivedType ? `[${sourceChildContext.child.derivedType}]` : ''}${String(sourceChildContext.child.race || '未知')}`
-    : '';
-  const declaredRace = fixedChildRace || String(options.declaredRace || '').trim();
   const includeBreedingPsychology = Boolean(options.breedingInference);
-  const payload = await buildRegistryPayload(ctx, settings, chatState, { ...options, customNotes, declaredRace, sourceChildContext });
+  const payload = await buildRegistryPayload(ctx, settings, chatState, { ...options, customNotes, sourceChildContext });
   payload.breeding_psychology_enabled = includeBreedingPsychology;
   if (includeBreedingPsychology) payload.breeding_inference = options.breedingInference;
   try {
@@ -1945,7 +1858,7 @@ export async function runRegistry(ctx, options = {}) {
   } catch (error) {
     console.warn('[BS BioTracker][registry] payload size debug failed', error);
   }
-  const systemPrompt = options.systemPrompt || buildRegistrySystemPrompt(settings, { ...options, customNotes, declaredRace, payload, includeBreedingPsychology });
+  const systemPrompt = options.systemPrompt || buildRegistrySystemPrompt(settings, { ...options, customNotes, payload, includeBreedingPsychology });
   recordRegistryRequestDebug(systemPrompt, payload);
   try {
     const result = await callOpenAICompatible(

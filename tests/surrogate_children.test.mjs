@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import * as state from '../scripts/state.js';
-import { getBaseRaceName, getRaceComponents, getRaceDescriptorComponents, parseRaceDescriptor } from '../scripts/race_config.js';
 import { applyToolCall, calculateChimeraFusionProbability } from '../scripts/tools.js';
 
 function makeCharacter(name, fetuses = []) {
@@ -134,105 +133,20 @@ test('implanting queues every embryo under one pre-implantation clock', () => {
   }
 });
 
-test('embryo race follows the provider, not the carrier', () => {
+test('implanted embryos are always human regardless of provider or race args', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['宿主'] = makeHost('宿主', '人类');
   chatState.characters['虫母'] = makeHost('虫母', '虫族');
 
+  // 种族锁死人类：race 参数仅作兼容，不再读取
   applyToolCall(chatState, {
     name: 'bsImplantEmbryo',
-    arguments: { female: '宿主', provider: '虫母', count: 1 },
+    arguments: { female: '宿主', provider: '虫母', count: 1, race: '虫族', fathers: '虫源' },
   });
 
-  // 必须精确比对：按承载者算会得到「人类x虫族」，光用 /虫族/ 匹配是抓不出来的
   const fetus = chatState.characters['宿主'].profile.pregnant.fetuses[0];
-  assert.equal(fetus.race, '虫族', `胚胎应是纯虫族血统，实际为 ${fetus.race}`);
-});
-
-test('decorated hybrid descriptors preserve every subtype while physiology uses each base race', () => {
-  const descriptor = '[魔女]獸耳族-兔x精靈-木';
-  assert.deepEqual(parseRaceDescriptor(descriptor), {
-    race: '獸耳族-兔x精靈-木',
-    derivedType: '魔女',
-  });
-  assert.deepEqual(getRaceDescriptorComponents(descriptor), ['獸耳族-兔', '精靈-木']);
-  assert.deepEqual(getRaceComponents(descriptor), ['獸耳族', '精靈']);
-  assert.equal(getBaseRaceName(descriptor), '獸耳族');
-
-  const chatState = state.createEmptyChatState();
-  chatState.characters['孕母'] = makeHost('孕母', '人类');
-  applyToolCall(chatState, {
-    name: 'bsImplantEmbryo',
-    arguments: {
-      female: '孕母',
-      provider: '混血卵源',
-      race: descriptor,
-      fathers: '同血统父源',
-      fatherRace: '獸耳族-兔x精靈-木',
-    },
-  });
-
-  const fetus = chatState.characters['孕母'].profile.pregnant.fetuses[0];
-  assert.equal(fetus.race, '獸耳族-兔x精靈-木', '同血统配对不可丢失任一装饰子项');
-  assert.equal(fetus.fatherDerivedType, '魔女', 'fatherRace 无 derivedType 时仍应从卵源描述符回退');
-});
-
-test('surrogate derived types use the carrier as mother and external descriptors as father', () => {
-  const preferred = state.createEmptyChatState();
-  preferred.characters['孕母'] = makeHost('孕母', '人类');
-  preferred.characters['孕母'].profile.base.derivedType = '魔女';
-
-  applyToolCall(preferred, {
-    name: 'bsImplantEmbryo',
-    arguments: {
-      female: '孕母',
-      provider: '未注册卵源',
-      race: '[不死-僵尸]虫族',
-      fathers: '父源',
-      fatherRace: '[魔女]虫族',
-    },
-  });
-
-  const preferredFetus = preferred.characters['孕母'].profile.pregnant.fetuses[0];
-  assert.equal(preferredFetus.race, '虫族');
-  assert.equal(preferredFetus.fatherDerivedType, '魔女', 'fatherRace 的 derivedType 应优先');
-  assert.equal(preferredFetus.affinity, 30, '孕母与父系同类时应使用同源种子');
-  assert.equal(preferredFetus.maternalDerivedTypeProgress, 30);
-
-  const fallback = state.createEmptyChatState();
-  fallback.characters['孕母'] = makeHost('孕母', '人类');
-  fallback.characters['孕母'].profile.base.derivedType = '魔女';
-  applyToolCall(fallback, {
-    name: 'bsImplantEmbryo',
-    arguments: {
-      female: '孕母',
-      provider: '未注册卵源',
-      race: '[不死-僵尸]虫族',
-      fathers: '普通父源',
-      fatherRace: '虫族',
-    },
-  });
-
-  const fallbackFetus = fallback.characters['孕母'].profile.pregnant.fetuses[0];
-  assert.equal(fallbackFetus.fatherDerivedType, '不死-僵尸', 'fatherRace 未带 derivedType 时应退回卵源 race');
-  assert.equal(fallbackFetus.affinity, -30, '孕母与外部父系异类时应使用对立种子');
-  assert.equal(fallbackFetus.maternalDerivedTypeProgress, -30);
-});
-
-test('bsAddSperm reads paternal derivedType from the race descriptor, not the male name', () => {
-  const chatState = state.createEmptyChatState();
-  chatState.characters['孕母'] = makeHost('孕母', '人类');
-  chatState.characters['同名父亲'] = makeHost('同名父亲', '人类');
-  chatState.characters['同名父亲'].profile.base.derivedType = '不死-僵尸';
-
-  applyToolCall(chatState, {
-    name: 'bsAddSperm',
-    arguments: { female: '孕母', male: '同名父亲', race: '[魔女]人类X精灵', amount: 100 },
-  });
-
-  const sperm = chatState.characters['孕母'].profile.base.sperms[0];
-  assert.equal(sperm.race, '人类X精灵');
-  assert.equal(sperm.derivedType, '魔女');
+  assert.equal(fetus.race, '人类');
+  assert.equal(fetus.fatherRace, '人类');
 });
 
 test('same-race parents do not produce a self-hybrid race', () => {
@@ -249,7 +163,7 @@ test('same-race parents do not produce a self-hybrid race', () => {
   assert.equal(chatState.characters['代孕者'].profile.pregnant.fetuses[0].race, '人类');
 });
 
-test('a cross-species father still hybridises with the genetic mother', () => {
+test('a cross-species father no longer hybridises: race is locked to human', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['宿主'] = makeHost('宿主', '人类');
   chatState.characters['虫母'] = makeHost('虫母', '虫族');
@@ -259,13 +173,10 @@ test('a cross-species father still hybridises with the genetic mother', () => {
     arguments: { female: '宿主', provider: '虫母', fathers: '精灵战士', fatherRace: '精灵' },
   });
 
-  const race = String(chatState.characters['宿主'].profile.pregnant.fetuses[0].race);
-  assert.match(race, /虫族/);
-  assert.match(race, /精灵/);
-  assert.doesNotMatch(race, /人类/, '承载者的种族不该混进血统');
+  assert.equal(String(chatState.characters['宿主'].profile.pregnant.fetuses[0].race), '人类');
 });
 
-test('an unregistered provider can still supply the race explicitly', () => {
+test('an unregistered provider can still supply embryos by count', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['宿主'] = makeHost('宿主', '人类');
 
@@ -276,7 +187,7 @@ test('an unregistered provider can still supply the race explicitly', () => {
 
   const fetuses = chatState.characters['宿主'].profile.pregnant.fetuses;
   assert.equal(fetuses.length, 3);
-  assert.match(String(fetuses[0].race), /虫族/);
+  assert.equal(fetuses[0].race, '人类');
   assert.equal(fetuses[0].provider, '深渊母巢');
 });
 
@@ -353,25 +264,16 @@ test('later embryo transfers join the existing fertilizationDays window without 
   assert.equal(profile.pregnant.fetuses.length, 2);
 });
 
-test('chimera probability applies derived and embryo-system modifiers', () => {
+test('chimera fusion probability is the fixed human baseline', () => {
+  // 全人类输入下，原公式的种族/衍生/胚型因子全部坍缩为常量 5%
   const baseA = { race: '人类', embryoType: '胎生' };
   const baseB = { race: '人类', embryoType: '胎生' };
-  const ordinary = calculateChimeraFusionProbability(baseA, baseB);
-  const oneDerived = calculateChimeraFusionProbability({ ...baseA, fatherDerivedType: '魔女' }, baseB);
-  const sameDerived = calculateChimeraFusionProbability(
+  assert.equal(calculateChimeraFusionProbability(baseA, baseB), 5);
+  assert.equal(calculateChimeraFusionProbability(
     { ...baseA, fatherDerivedType: '魔女' },
     { ...baseB, fatherDerivedType: '魔女' },
-  );
-  const incompatible = calculateChimeraFusionProbability(
-    { ...baseA, fatherDerivedType: '魔女' },
-    { ...baseB, fatherDerivedType: '不死' },
-  );
-  const differentSystem = calculateChimeraFusionProbability(baseA, { ...baseB, embryoType: '卵生' });
-
-  assert.equal(oneDerived, ordinary * 0.5);
-  assert.equal(sameDerived, ordinary * 1.5);
-  assert.equal(incompatible, 0);
-  assert.equal(differentSystem, ordinary * 0.25);
+  ), 5);
+  assert.equal(calculateChimeraFusionProbability(baseA, { ...baseB, embryoType: '卵生' }), 5);
 });
 
 test('two early embryos can fuse across races and keep dual parents under the carrier', () => {
@@ -406,8 +308,7 @@ test('two early embryos can fuse across races and keep dual parents under the ca
   assert.equal(chimera.gender, '待定');
   assert.equal(chimera.fathers, '父A × 父B');
   assert.deepEqual(chimera.providerSources, ['母A', '母B']);
-  assert.match(chimera.race, /獸耳族-兔/);
-  assert.match(chimera.race, /精靈-木/);
+  assert.equal(chimera.race, '人类');
   assert.equal(chimera.chimera.sourceCount, 2);
 
   Math.random = () => 0.99;

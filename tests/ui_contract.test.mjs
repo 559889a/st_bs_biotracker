@@ -15,8 +15,12 @@ test('home grid and manual skill/wardrobe controls stay wired in markup and cont
   assert.deepEqual(views, [
     'tracker-preset', 'worldbook-filter', 'register',
     'skill-catalog', 'track-list', 'wardrobe',
-    'full-state', 'race-encyclopedia', 'theme',
+    'full-state', 'theme',
   ]);
+  // 种族系统已移除：百科页、注册种族输入与调色盘不得回流
+  assert.doesNotMatch(html, /race-encyclopedia/);
+  assert.doesNotMatch(html, /data-race-picker/);
+  assert.doesNotMatch(html, /id="bs-bt-register-race"/);
   for (const id of [
     'bs-bt-skill-catalog-list', 'bs-bt-skill-definition-detail', 'bs-bt-skill-detail-characters',
     'bs-bt-wardrobe-tabs', 'bs-bt-wardrobe-list', 'bs-bt-wardrobe-characters-page', 'bs-bt-wardrobe-add-page',

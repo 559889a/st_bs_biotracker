@@ -53,14 +53,13 @@ test('回归后进入回归期，多出一胎且胎重为上限', () => {
   assert.equal(profile.pregnant.wombReturn.remainingHours, 12);
 });
 
-test('母为承载者、父为回归者，种族照常混血，并带 rebirth 标签', () => {
+test('母为承载者、父为回归者，带 rebirth 标签（种族锁死人类）', () => {
   const chatState = setup({ base: { race: '精灵' } }, { base: { race: '龙族' } });
   call(chatState, 'bsWombReturn', { female: '艾拉', returner: '琪拉', hours: 1 });
   const fetus = hostOf(chatState).pregnant.fetuses[0];
   assert.equal(fetus.fathers, '琪拉');
-  assert.equal(fetus.fatherRace, '龙族');
-  assert.match(fetus.race, /精灵/);
-  assert.match(fetus.race, /龙族/);
+  assert.equal(fetus.fatherRace, '人类');
+  assert.equal(fetus.race, '人类');
   assert.deepEqual(deriveFetusTags(fetus, { carrierName: '艾拉' }), ['rebirth']);
 });
 
@@ -352,33 +351,33 @@ test('回归者不必是已注册角色：user 被吞', () => {
   assert.equal(chatState.characters['用户'], undefined, '不该凭空注册出一个角色');
 });
 
-test('未注册的回归者可用 returnerRace 指定种族，含衍生类型', () => {
+test('returnerRace 仅作兼容：无论给什么都锁死人类', () => {
   const chatState = setup({ base: { race: '人类' } });
   delete chatState.characters['琪拉'];
   call(chatState, 'bsWombReturn', {
     female: '艾拉', returner: '无名旅人', returnerRace: '[血族]龙族', hours: 1,
   });
   const fetus = hostOf(chatState).pregnant.fetuses[0];
-  assert.equal(fetus.fatherRace, '龙族');
-  assert.equal(fetus.fatherDerivedType, '血族');
-  assert.match(fetus.race, /龙族/);
+  assert.equal(fetus.fatherRace, '人类');
+  assert.equal(fetus.fatherDerivedType, undefined);
+  assert.equal(fetus.race, '人类');
 });
 
-test('未注册且没给种族时，视同与承载者同族', () => {
+test('未注册且没给种族时，同样锁死人类', () => {
   const chatState = setup({ base: { race: '精灵' } });
   delete chatState.characters['琪拉'];
   call(chatState, 'bsWombReturn', { female: '艾拉', returner: '路人', hours: 1 });
   const fetus = hostOf(chatState).pregnant.fetuses[0];
-  assert.equal(fetus.fatherRace, '精灵');
-  assert.equal(fetus.race, '精灵');
+  assert.equal(fetus.fatherRace, '人类');
+  assert.equal(fetus.race, '人类');
 });
 
-test('returnerRace 优先于已注册角色自己的种族', () => {
+test('已注册回归者自己的种族同样不再参与', () => {
   const chatState = setup({ base: { race: '人类' } }, { base: { race: '龙族' } });
   call(chatState, 'bsWombReturn', {
     female: '艾拉', returner: '琪拉', returnerRace: '兽人', hours: 1,
   });
-  assert.equal(hostOf(chatState).pregnant.fetuses[0].fatherRace, '兽人');
+  assert.equal(hostOf(chatState).pregnant.fetuses[0].fatherRace, '人类');
 });
 
 test('未注册的回归者没有冻结这回事，也没有天赋可继承', () => {

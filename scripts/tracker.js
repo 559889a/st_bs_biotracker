@@ -29,8 +29,8 @@ import {
   shouldTriggerForMessage,
   worldbookSelectionMatches,
 } from './state.js';
-import { getDerivedTypeMetabolismExemptions } from './race_config.js';
-import { LABOR_STAGES, PREGNANCY_STAGES } from './stage_config.js';
+import { LABOR_STAGES, PREGNANCY_STAGES, MENSTRUAL_STAGES } from './stage_config.js';
+import { formatStageProgress, getHormonePhaseKey } from './hormone_context.js';
 import { canLoadHostWorldInfo, getHostAgentRunBarrier, getHostChat, getHostExtensionSettings, getHostKind, loadHostWorldInfo, refreshHostChatView } from './host.js';
 
 export const POLL_RUNTIME_KEY = '__bs_biotracker_poll__';
@@ -554,6 +554,19 @@ function buildNarrativeWardrobeItem(entry) {
   };
 }
 
+/**
+ * 黄体期分带（早/晚）用的粗略阶段上限。精确值在 tools.getStageLimit
+ * （含活力/情压扰动），tracker 侧不便跨模块复用就按默认标尺估算——
+ * 差 ±15% 只影响 PMS 窗口提前或推后不到半天，可接受。
+ */
+function estimatePromptStageLimit(base = {}, profile = {}) {
+  const stage = String(base?.stage || '');
+  const defaults = { 卵泡期: 9, 排卵期: 2, 黄体期: 12, 月经期: 5 };
+  if (!defaults[stage]) return 0;
+  const ratio = Math.max(0.1, Number(profile?.bio?.menstrualLengthRatio) || 1);
+  return Math.max(1, defaults[stage] * ratio);
+}
+
 function buildPromptFacingCharacterState(item, diaryLimit = 0) {
   const next = cloneValue(item);
   const profile = next?.profile || {};
@@ -568,6 +581,9 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
     ...base,
     vitalityLevelText: getVitalityLevelText(base.vitalityLevel),
     psyStressLevelText: getPsyStressLevelText(base.psyStressLevel),
+    // 激素画像层：阶段进度文本 + 阶段键（黄体期分早晚段），随 tracker 每轮重算
+    stageProgressText: formatStageProgress(profile),
+    hormonePhase: getHormonePhaseKey(base.stage, base.days, estimatePromptStageLimit(base, profile)),
   };
 
   if (!sendPregnantState) {
@@ -601,28 +617,14 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
     };
   }
 
-  if (base.derivedType) {
-    const exemptions = new Set(getDerivedTypeMetabolismExemptions(base.derivedType));
-    const includeNeed = (key) => (exemptions.has(key) ? {} : { [key]: metabolism[key] ?? 0 });
-    profile.metabolism = {
-      flux: Number.isFinite(Number(metabolism.flux)) ? Number(metabolism.flux) : 0,
-      ...includeNeed('excretion'),
-      ...includeNeed('hunger'),
-      ...includeNeed('sleep'),
-      ...includeNeed('milk'),
-      ...includeNeed('odor'),
-      ...includeNeed('companionship'),
-    };
-  } else {
-    profile.metabolism = {
-      excretion: metabolism.excretion ?? 0,
-      hunger: metabolism.hunger ?? 0,
-      sleep: metabolism.sleep ?? 0,
-      milk: metabolism.milk ?? 0,
-      odor: metabolism.odor ?? 0,
-      companionship: metabolism.companionship ?? 0,
-    };
-  }
+  profile.metabolism = {
+    excretion: metabolism.excretion ?? 0,
+    hunger: metabolism.hunger ?? 0,
+    sleep: metabolism.sleep ?? 0,
+    milk: metabolism.milk ?? 0,
+    odor: metabolism.odor ?? 0,
+    companionship: metabolism.companionship ?? 0,
+  };
 
   if (profile.wardrobe?.enabled && profile.outfit && typeof profile.outfit === 'object') {
     profile.outfit.currentWearText = getOutfitCurrentWearText(profile);
@@ -648,8 +650,7 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
   return next;
 }
 
-function buildOffscreenCharacterState(item, diaryLimit = 0) {
-  const profile = item?.profile || {};
+function buildOffscreenCharacterState(item, diaryLimit = 0) {  const profile = item?.profile || {};
   const base = profile.base || {};
   const pregnant = profile.pregnant || {};
   const notify = profile.notify || {};
@@ -665,8 +666,8 @@ function buildOffscreenCharacterState(item, diaryLimit = 0) {
         stage: base.stage ?? null,
         days: base.days ?? 0,
         age: base.age ?? null,
-        race: base.race ?? null,
-        derivedType: base.derivedType ?? null,
+        stageProgressText: formatStageProgress(profile),
+        hormonePhase: getHormonePhaseKey(base.stage, base.days, estimatePromptStageLimit(base, profile)),
       },
       ...(sendPregnantState ? {
         pregnant: {
@@ -958,7 +959,6 @@ export function buildTrackerPayload(ctx, settings, reason = 'manual', endIndexEx
     existing_state: buildTrackerStateView(existingState, settings),
     available_tools: getTrackerToolDefinitions(settings, existingState),
     diary_enabled: diaryEnabled,
-    race_catalog_enabled: settings?.raceCatalogInPrompt !== false,
     require_full_description_updates: settings?.requireFullDescriptionUpdates === true,
     ...(psychologyEnabled ? { breeding_psychology_enabled: true } : {}),
     wardrobe_enabled: hasPreparedWardrobe(existingState),

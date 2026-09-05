@@ -12,29 +12,6 @@ import {
   runRegistryWardrobeInference,
 } from './scripts/registry.js';
 import {
-  AMORPHOUS_RACES,
-  DERIVED_TYPE_FLUX_PROFILES,
-  DERIVED_TYPE_INHERITANCE_PROFILES,
-  DERIVED_TYPE_RACES,
-  RACE_INTRODUCTION_FIELD,
-  RACE_PHYSIOLOGY_FIELDS,
-  getEmbryoTypeByRace,
-  getBuiltinRacePhysiologyProfile,
-  getDerivedTypeFluxProfile,
-  getDerivedTypeInheritanceProfile,
-  getDerivedTypeIntroductionLine,
-  getDerivedTypeMetabolismExemptions,
-  getDerivedTypeOverride,
-  getRaceIntroductionLine,
-  getRacePhysiologyOverride,
-  setRacePhysiologyOverrides,
-  setDerivedTypeOverrides,
-  METOVIVIPAROUS_RACES,
-  OVIPAROUS_RACES,
-  OVOVIVIPAROUS_RACES,
-  VIVIPAROUS_RACES,
-} from './scripts/race_config.js';
-import {
   FIRST_STAGE_NATURAL_BIRTH_EXPERIENCE,
   LABOR_STAGES,
   LABOR_STAGE_BASE_HOURS,
@@ -49,8 +26,6 @@ import { buildLineageView, relatedNodeIds } from './scripts/lineage_view.js';
 import { deriveFetusTags, getFetusTagLabels } from './scripts/fetus_tags.js';
 import { isFetusKnownToCharacter } from './scripts/tools.js';
 import { applyToolCall } from './scripts/tools.js';
-import { getEmbryoTypeReferenceText } from './scripts/embryo_prompt_context.js';
-import { buildSingleRacePhysiologyText } from './scripts/race_prompt_context.js';
 import { appendSkillHistory, getTalentLabel, normalizeTalentList, removeSkillDefinition, requiredExp, resolveSkillDefinition, SKILL_MAX_LEVEL, TALENT_MAX_LEVEL } from './scripts/skill_config.js';
 import {
   canLoadHostWorldInfo,
@@ -142,7 +117,6 @@ const registryPendingOps = new Map();
 let registryInferenceResultName = '';
 /** 注册页最后一次初始化对应的聊天，用来区分「重开弹窗」与「换聊天」 */
 let registerPageChatKey = null;
-let registerManualRaceDraft = '人类';
 let selectedRegisterChildSourceKey = '';
 const ORIGINAL_FETCH_KEY = '__bs_biotracker_original_fetch__';
 const MAX_MAINFLOW_SNAPSHOT_MESSAGES = 48;
@@ -157,25 +131,11 @@ let selectedTrackCardIndexes = {};
 let selectedWardrobeName = '';
 let selectedWardrobeSubpage = 'characters';
 let selectedSkillDefinitionId = 0;
-let selectedRaceEncyclopedia = '';
-let selectedDerivedEncyclopedia = '';
-let racePhysiologyEditorOpen = false;
-let derivedTypeEditorOpen = false;
-let selectedEncyclopediaSubpage = 'race';
 let worldbookEntrySearch = '';
 let latestWorldbookEntries = [];
 let globalWorldbookEntrySearch = '';
 let latestGlobalWorldbookEntries = [];
 let selectedWorldbookScopeTab = 'character';
-let racePaletteState = {
-  targetInputId: '',
-  isOpen: false,
-  selectedRace: '人类',
-  selectedDerivedType: '',
-  derivedSubtype: '',
-  subtype: '',
-  raceTags: [],
-};
 
 function normalizeWorldbookMode(value) {
   const mode = String(value || 'exclude').trim();
@@ -184,7 +144,6 @@ function normalizeWorldbookMode(value) {
 }
 let debugInjectDraft = {
   father: '',
-  race: '人类',
   fetusCount: '1',
   genders: '女',
   equivalentDays: '0',
@@ -204,43 +163,6 @@ let debugFetalTalentDraft = {
   fetusIndex: 0,
   skillId: 0,
 };
-
-const RACE_PALETTE_GROUPS = [
-  { label: '胎生', races: VIVIPAROUS_RACES },
-  { label: '卵生', races: OVIPAROUS_RACES },
-  { label: '卵胎生', races: OVOVIVIPAROUS_RACES },
-  { label: '胎转卵生', races: METOVIVIPAROUS_RACES },
-  { label: '不定型', races: AMORPHOUS_RACES },
-];
-const RACE_ENCYCLOPEDIA_LIST = Array.from(
-  new Set([
-    ...VIVIPAROUS_RACES,
-    ...OVIPAROUS_RACES,
-    ...OVOVIVIPAROUS_RACES,
-    ...METOVIVIPAROUS_RACES,
-    ...AMORPHOUS_RACES,
-  ]),
-).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-const RACE_ENCYCLOPEDIA_GROUPS = RACE_PALETTE_GROUPS.map((group) => ({
-  label: group.label,
-  races: Array.from(new Set(group.races)),
-})).filter((group) => group.races.length > 0);
-const DERIVED_ENCYCLOPEDIA_LIST = Array.from(new Set(DERIVED_TYPE_RACES)).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-const RACE_PHYSIOLOGY_FIELD_LABELS = Object.freeze({
-  menstrualLengthRatio: '经期长度倍率',
-  gestationSpeciesSpeed: '妊娠速度倍率',
-  birthDifficulty: '分娩难度',
-  breedTolerance: '承载耐受',
-  impregnationDifficulty: '受精难度',
-  orgasmOvulationAmount: '额外排卵倾向',
-  identicalProbability: '同卵多胎概率(%)',
-  genderRatio: '男胎比例',
-});
-const RACE_PHYSIOLOGY_FIELD_HINTS = Object.freeze({
-  genderRatio: '0-100；空白=双性，-1=无性',
-});
-const EDITABLE_RACE_PHYSIOLOGY_FIELDS = Object.freeze(RACE_PHYSIOLOGY_FIELDS.filter((field) => field !== 'recoveryDays'));
-const RACE_INTRODUCTION_LABEL = '物种短敘述';
 
 function setConnectStatus(message, isError = false) {
   const el = document.getElementById('bs-bt-connect-status');
@@ -845,42 +767,24 @@ function getSelectedRegisterChildSource(ctx) {
 
 function syncRegisterChildSourceFields(ctx) {
   const sourceSelect = document.getElementById('bs-bt-register-source');
-  const raceInput = document.getElementById('bs-bt-register-race');
   const nameInput = document.getElementById('bs-bt-register-name');
   const summary = document.getElementById('bs-bt-register-source-summary');
-  const pickerButton = document.querySelector('[data-race-picker-target="bs-bt-register-race"]');
   const nextKey = String(sourceSelect?.value || '');
   const source = getSelectedRegisterChildSource(ctx);
   if (nextKey && !source) {
     if (sourceSelect) sourceSelect.value = '';
     selectedRegisterChildSourceKey = '';
-    if (raceInput) {
-      raceInput.readOnly = false;
-      raceInput.value = registerManualRaceDraft || '人类';
-    }
-    if (pickerButton instanceof HTMLButtonElement) pickerButton.disabled = false;
     if (summary) summary.textContent = '孩子来源已失效，请重新选择。';
     return;
   }
   if (!source) {
-    if (selectedRegisterChildSourceKey && raceInput) raceInput.value = registerManualRaceDraft || '人类';
     selectedRegisterChildSourceKey = '';
-    if (raceInput) raceInput.readOnly = false;
-    if (pickerButton instanceof HTMLButtonElement) pickerButton.disabled = false;
     if (summary) summary.textContent = '直接注册新角色。';
     return;
   }
-  if (!selectedRegisterChildSourceKey && raceInput) registerManualRaceDraft = String(raceInput.value || '人类');
   selectedRegisterChildSourceKey = nextKey;
   const child = source.child;
   if (nameInput && child.name) nameInput.value = String(child.name);
-  if (raceInput) {
-    raceInput.value = formatRaceLabel(child.race, child.derivedType);
-    raceInput.readOnly = true;
-  }
-  if (pickerButton instanceof HTMLButtonElement) pickerButton.disabled = true;
-  closeRacePalettePopover();
-  refreshRegisterRacePalette();
   if (summary) {
     const talentNames = (Array.isArray(child.talents) ? child.talents : []).map((talent) => {
       const definition = getSkillDefinitionDisplay(getChatState(ctx, getSettings(ctx)).skillCatalog, talent.skillId);
@@ -974,7 +878,6 @@ function getRegisterFormValues(ctx = getContextSafe()) {
   return {
     targetName: resolveRegistryTargetName(ctx, rawTargetName),
     rawTargetName,
-    declaredRace: String(document.getElementById('bs-bt-register-race')?.value || '').trim(),
     customNotes: String(document.getElementById('bs-bt-register-custom-notes')?.value || '').trim(),
     specialFetus: getSpecialFetusRequest(),
     breedingInferencePrompt: String(document.getElementById('bs-bt-breeding-inference-prompt')?.value || '').trim(),
@@ -1016,7 +919,6 @@ function getApplicableBreedingInferenceDraft(values) {
   const draft = registryBreedingInferenceDraft;
   if (!draft?.result) return null;
   if (draft.targetName !== values.targetName) return null;
-  if (draft.declaredRace !== values.declaredRace) return null;
   if (draft.customNotes !== values.customNotes) return null;
   if (draft.breedingInferencePrompt !== values.breedingInferencePrompt) return null;
   if (draft.sourceChildKey !== values.sourceChildKey) return null;
@@ -1473,371 +1375,6 @@ function updateBatteryIndicator(settings = null) {
   if (input.text && !usingCachedCount) queueHostTokenCount(input, settings);
 }
 
-function syncRacePhysiologyOverrides(settings) {
-  setRacePhysiologyOverrides(settings?.racePhysiologyOverrides || {});
-  setDerivedTypeOverrides(settings?.derivedTypeOverrides || {});
-}
-
-function setEncyclopediaSubpage(page) {
-  selectedEncyclopediaSubpage = page === 'derived' ? 'derived' : 'race';
-  document.querySelectorAll('#bs-bt-encyclopedia-tabs [data-encyclopedia-tab]').forEach((node) => {
-    node.classList.toggle('is-active', node.dataset.encyclopediaTab === selectedEncyclopediaSubpage);
-  });
-  document.querySelectorAll('[data-encyclopedia-page]').forEach((node) => {
-    const active = node.dataset.encyclopediaPage === selectedEncyclopediaSubpage;
-    node.classList.toggle('is-active', active);
-    node.hidden = !active;
-  });
-}
-
-function scrollEncyclopediaToTop() {
-  const view = document.getElementById('bs-bt-view-race-encyclopedia');
-  const scroller = view?.closest('.bs-bt-screen-content');
-  if (scroller) scroller.scrollTop = 0;
-}
-
-function getRacePhysiologyFieldStep(field) {
-  if (field === 'orgasmOvulationAmount' || field === 'genderRatio') return '1';
-  return '0.01';
-}
-
-function getRacePhysiologyFieldMin(field) {
-  return field === 'genderRatio' ? '-1' : '0';
-}
-
-function getRacePhysiologyInputValue(race, field) {
-  const override = getRacePhysiologyOverride(race);
-  if (override && Object.prototype.hasOwnProperty.call(override, field)) {
-    return override[field] === null ? '' : String(override[field]);
-  }
-  const builtin = getBuiltinRacePhysiologyProfile(race);
-  if (!builtin || !Object.prototype.hasOwnProperty.call(builtin, field)) return '';
-  return builtin[field] === null ? '' : String(builtin[field]);
-}
-
-function getRaceIntroductionInputValue(race) {
-  return getRaceIntroductionLine(race);
-}
-
-function renderRacePhysiologyEditor(race) {
-  const editorNode = document.getElementById('bs-bt-race-editor');
-  const statusNode = document.getElementById('bs-bt-race-editor-status');
-  if (!editorNode) return;
-  editorNode.innerHTML = '';
-  if (statusNode) statusNode.textContent = '物种短敘述可留空；数值只保存与内置值不同的字段；产后恢复天数由系统公式与指令流程处理。';
-  if (!race) {
-    editorNode.textContent = '请选择种族后编辑参数。';
-    return;
-  }
-  const override = getRacePhysiologyOverride(race);
-  const builtin = getBuiltinRacePhysiologyProfile(race);
-  if (!builtin) {
-    editorNode.textContent = '此种族没有内置生理资料。';
-    return;
-  }
-
-  const introductionLabel = document.createElement('label');
-  introductionLabel.className = 'bs-bt-race-editor-field bs-bt-race-editor-field-wide';
-  introductionLabel.setAttribute('for', 'bs-bt-race-introduction-line');
-
-  const introductionText = document.createElement('span');
-  introductionText.textContent = RACE_INTRODUCTION_LABEL;
-  introductionLabel.appendChild(introductionText);
-
-  const introductionInput = document.createElement('textarea');
-  introductionInput.id = 'bs-bt-race-introduction-line';
-  introductionInput.className = 'text_pole bs-bt-race-introduction-input';
-  introductionInput.rows = 2;
-  introductionInput.dataset.raceIntroductionField = RACE_INTRODUCTION_FIELD;
-  introductionInput.value = getRaceIntroductionInputValue(race);
-  introductionInput.placeholder = '可留空；填入后会作为该物种的提示词短句。';
-  introductionLabel.appendChild(introductionInput);
-
-  if (override && Object.prototype.hasOwnProperty.call(override, RACE_INTRODUCTION_FIELD)) {
-    const badge = document.createElement('span');
-    badge.className = 'bs-bt-race-editor-badge';
-    badge.textContent = '已覆盖';
-    introductionLabel.appendChild(badge);
-  }
-
-  editorNode.appendChild(introductionLabel);
-
-  for (const field of EDITABLE_RACE_PHYSIOLOGY_FIELDS) {
-    const label = document.createElement('label');
-    label.className = 'bs-bt-race-editor-field';
-    label.setAttribute('for', `bs-bt-race-field-${field}`);
-
-    const text = document.createElement('span');
-    text.textContent = RACE_PHYSIOLOGY_FIELD_LABELS[field] || field;
-    label.appendChild(text);
-
-    const input = document.createElement('input');
-    input.id = `bs-bt-race-field-${field}`;
-    input.className = 'text_pole';
-    input.type = 'number';
-    input.step = getRacePhysiologyFieldStep(field);
-    input.min = getRacePhysiologyFieldMin(field);
-    if (field === 'genderRatio') input.max = '100';
-    if (field === 'identicalProbability') input.max = '100';
-    input.dataset.racePhysiologyField = field;
-    input.value = getRacePhysiologyInputValue(race, field);
-    input.placeholder = RACE_PHYSIOLOGY_FIELD_HINTS[field] || '';
-    label.appendChild(input);
-
-    if (override && Object.prototype.hasOwnProperty.call(override, field)) {
-      const badge = document.createElement('span');
-      badge.className = 'bs-bt-race-editor-badge';
-      badge.textContent = '已覆盖';
-      label.appendChild(badge);
-    }
-
-    editorNode.appendChild(label);
-  }
-}
-
-function collectRacePhysiologyEditorProfile(race, { onlyDiff = false } = {}) {
-  const builtin = getBuiltinRacePhysiologyProfile(race);
-  if (!builtin) return null;
-  const result = {};
-  const introductionInput = document.querySelector(`[data-race-introduction-field="${RACE_INTRODUCTION_FIELD}"]`);
-  if (introductionInput instanceof HTMLTextAreaElement) {
-    const value = String(introductionInput.value || '').trim();
-    const baseValue = '';
-    const changed = value !== baseValue;
-    if (value && (!onlyDiff || changed)) result[RACE_INTRODUCTION_FIELD] = value;
-  }
-  for (const field of EDITABLE_RACE_PHYSIOLOGY_FIELDS) {
-    const input = document.querySelector(`[data-race-physiology-field="${field}"]`);
-    if (!(input instanceof HTMLInputElement)) continue;
-    let value;
-    if (field === 'genderRatio' && String(input.value || '').trim() === '') value = null;
-    else {
-      const num = Number(input.value);
-      if (!Number.isFinite(num)) continue;
-      value = (field === 'orgasmOvulationAmount' || field === 'genderRatio') ? Math.round(num) : num;
-    }
-    const baseValue = builtin[field];
-    const changed = value === null ? baseValue !== null : Math.abs(Number(value) - Number(baseValue)) > 0.0001;
-    if (!onlyDiff || changed) result[field] = value;
-  }
-  return result;
-}
-
-function saveRacePhysiologyOverrideFromEditor(ctx, mode = 'diff') {
-  if (!ctx || !selectedRaceEncyclopedia) return;
-  const settings = getSettings(ctx);
-  const currentOverrides = settings.racePhysiologyOverrides && typeof settings.racePhysiologyOverrides === 'object'
-    ? { ...settings.racePhysiologyOverrides }
-    : {};
-  const profile = collectRacePhysiologyEditorProfile(selectedRaceEncyclopedia, { onlyDiff: mode === 'diff' });
-  if (!profile) return;
-  if (Object.keys(profile).length === 0) delete currentOverrides[selectedRaceEncyclopedia];
-  else currentOverrides[selectedRaceEncyclopedia] = profile;
-  settings.racePhysiologyOverrides = currentOverrides;
-  syncRacePhysiologyOverrides(settings);
-  saveSettings(ctx);
-  updateMainFlowPrompt(ctx);
-  racePhysiologyEditorOpen = false;
-  renderRaceEncyclopediaPage(ctx);
-}
-
-function resetRacePhysiologyOverride(ctx) {
-  if (!ctx || !selectedRaceEncyclopedia) return;
-  const settings = getSettings(ctx);
-  const currentOverrides = settings.racePhysiologyOverrides && typeof settings.racePhysiologyOverrides === 'object'
-    ? { ...settings.racePhysiologyOverrides }
-    : {};
-  delete currentOverrides[selectedRaceEncyclopedia];
-  settings.racePhysiologyOverrides = currentOverrides;
-  syncRacePhysiologyOverrides(settings);
-  saveSettings(ctx);
-  updateMainFlowPrompt(ctx);
-  racePhysiologyEditorOpen = false;
-  renderRaceEncyclopediaPage(ctx);
-}
-
-function copyHumanPhysiologyToEditor() {
-  const human = getBuiltinRacePhysiologyProfile('人类');
-  if (!human) return;
-  const introductionInput = document.querySelector(`[data-race-introduction-field="${RACE_INTRODUCTION_FIELD}"]`);
-  if (introductionInput instanceof HTMLTextAreaElement) introductionInput.value = '';
-  for (const field of EDITABLE_RACE_PHYSIOLOGY_FIELDS) {
-    const input = document.querySelector(`[data-race-physiology-field="${field}"]`);
-    if (!(input instanceof HTMLInputElement)) continue;
-    input.value = human[field] === null ? '' : String(human[field]);
-  }
-}
-
-function openRacePhysiologyEditor(ctx) {
-  if (!selectedRaceEncyclopedia) return;
-  racePhysiologyEditorOpen = true;
-  renderRaceEncyclopediaPage(ctx);
-}
-
-function closeRacePhysiologyEditor() {
-  racePhysiologyEditorOpen = false;
-  const modal = document.getElementById('bs-bt-race-editor-modal');
-  if (modal) modal.hidden = true;
-}
-
-function renderDerivedTypeEditor(derivedType) {
-  const editor = document.getElementById('bs-bt-derived-editor');
-  const builtinFlux = DERIVED_TYPE_FLUX_PROFILES[derivedType];
-  const builtinInheritance = DERIVED_TYPE_INHERITANCE_PROFILES[derivedType];
-  if (!editor || !builtinFlux || !builtinInheritance) return;
-  const flux = getDerivedTypeFluxProfile(derivedType) || builtinFlux;
-  const introductionLine = getDerivedTypeIntroductionLine(derivedType);
-  const inheritance = getDerivedTypeInheritanceProfile(derivedType) || builtinInheritance;
-  editor.innerHTML =
-    '<label class="bs-bt-race-editor-field bs-bt-race-editor-field-wide"><span>衍生短敘述</span><textarea id="bs-bt-derived-introduction-line" class="text_pole bs-bt-race-introduction-input">' + escapeHtml(introductionLine) + '</textarea></label>' +
-    '<label class="bs-bt-race-editor-field bs-bt-race-editor-field-wide"><span>Flux 描述</span><textarea id="bs-bt-derived-flux-definition" class="text_pole bs-bt-race-introduction-input">' + escapeHtml(flux.fluxDefinition || '') + '</textarea></label>' +
-    '<label class="bs-bt-race-editor-field"><span>遗传速度</span><input id="bs-bt-derived-inheritance-speed" class="text_pole" type="number" min="0" step="0.01" value="' + escapeHtml(inheritance.inheritanceSpeed) + '" /></label>';
-}
-
-function collectDerivedTypeEditorOverride(derivedType) {
-  const builtinFlux = DERIVED_TYPE_FLUX_PROFILES[derivedType];
-  const builtinInheritance = DERIVED_TYPE_INHERITANCE_PROFILES[derivedType];
-  if (!builtinFlux || !builtinInheritance) return null;
-  const result = {};
-  const introductionLine = String(document.getElementById('bs-bt-derived-introduction-line')?.value || '').trim();
-  const fluxDefinition = String(document.getElementById('bs-bt-derived-flux-definition')?.value || '').trim();
-  const speed = Number(document.getElementById('bs-bt-derived-inheritance-speed')?.value);
-  if (introductionLine) result.introductionLine = introductionLine;
-  if (fluxDefinition && fluxDefinition !== builtinFlux.fluxDefinition) result.fluxDefinition = fluxDefinition;
-  if (Number.isFinite(speed) && speed >= 0 && Math.abs(speed - builtinInheritance.inheritanceSpeed) > 0.0001) result.inheritanceSpeed = speed;
-  return result;
-}
-
-function closeDerivedTypeEditor() {
-  derivedTypeEditorOpen = false;
-  const modal = document.getElementById('bs-bt-derived-editor-modal');
-  if (modal) modal.hidden = true;
-}
-
-function saveDerivedTypeOverrideFromEditor(ctx) {
-  if (!ctx || !selectedDerivedEncyclopedia) return;
-  const settings = getSettings(ctx);
-  const overrides = { ...(settings.derivedTypeOverrides || {}) };
-  const profile = collectDerivedTypeEditorOverride(selectedDerivedEncyclopedia);
-  if (!profile) return;
-  if (Object.keys(profile).length) overrides[selectedDerivedEncyclopedia] = profile;
-  else delete overrides[selectedDerivedEncyclopedia];
-  settings.derivedTypeOverrides = overrides;
-  syncRacePhysiologyOverrides(settings);
-  saveSettings(ctx);
-  updateMainFlowPrompt(ctx);
-  closeDerivedTypeEditor();
-  renderRaceEncyclopediaPage(ctx);
-}
-
-function resetDerivedTypeOverride(ctx) {
-  if (!ctx || !selectedDerivedEncyclopedia) return;
-  const settings = getSettings(ctx);
-  const overrides = { ...(settings.derivedTypeOverrides || {}) };
-  delete overrides[selectedDerivedEncyclopedia];
-  settings.derivedTypeOverrides = overrides;
-  syncRacePhysiologyOverrides(settings);
-  saveSettings(ctx);
-  updateMainFlowPrompt(ctx);
-  closeDerivedTypeEditor();
-  renderRaceEncyclopediaPage(ctx);
-}
-
-function renderRaceEncyclopediaPage(ctx = null) {
-  if (ctx) syncRacePhysiologyOverrides(getSettings(ctx));
-  setEncyclopediaSubpage(selectedEncyclopediaSubpage);
-  const countNode = document.getElementById('bs-bt-race-count');
-  const selectNode = document.getElementById('bs-bt-race-select');
-  const outputNode = document.getElementById('bs-bt-race-output');
-  const derivedSelectNode = document.getElementById('bs-bt-derived-select');
-  const derivedOutputNode = document.getElementById('bs-bt-derived-output');
-  const derivedEditButton = document.getElementById('bs-bt-derived-open-editor');
-  const derivedEditorModal = document.getElementById('bs-bt-derived-editor-modal');
-  const derivedEditorTitle = document.getElementById('bs-bt-derived-editor-title');
-  const editButton = document.getElementById('bs-bt-race-open-editor');
-  const editorModal = document.getElementById('bs-bt-race-editor-modal');
-  const editorTitle = document.getElementById('bs-bt-race-editor-title');
-  if (!countNode || !selectNode || !outputNode || !derivedSelectNode || !derivedOutputNode) return;
-
-  countNode.innerHTML = `内置种族数量：${RACE_ENCYCLOPEDIA_LIST.length}<br>衍生类型数量：${DERIVED_ENCYCLOPEDIA_LIST.length}`;
-  if (!selectedRaceEncyclopedia || !RACE_ENCYCLOPEDIA_LIST.includes(selectedRaceEncyclopedia)) {
-    selectedRaceEncyclopedia = RACE_ENCYCLOPEDIA_LIST[0] || '';
-  }
-  if (!selectedDerivedEncyclopedia || !DERIVED_ENCYCLOPEDIA_LIST.includes(selectedDerivedEncyclopedia)) {
-    selectedDerivedEncyclopedia = DERIVED_ENCYCLOPEDIA_LIST[0] || '';
-  }
-
-  selectNode.innerHTML = '';
-  for (const group of RACE_ENCYCLOPEDIA_GROUPS) {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = `${group.label} (${group.races.length})`;
-    for (const race of group.races) {
-      const option = document.createElement('option');
-      option.value = race;
-      option.textContent = race;
-      option.selected = race === selectedRaceEncyclopedia;
-      optgroup.appendChild(option);
-    }
-    selectNode.appendChild(optgroup);
-  }
-  derivedSelectNode.innerHTML = '';
-  for (const derivedType of DERIVED_ENCYCLOPEDIA_LIST) {
-    const option = document.createElement('option');
-    option.value = derivedType;
-    option.textContent = derivedType;
-    option.selected = derivedType === selectedDerivedEncyclopedia;
-    derivedSelectNode.appendChild(option);
-  }
-
-  if (!selectedRaceEncyclopedia) {
-    outputNode.textContent = '暂无可显示的种族资料。';
-    if (editButton) editButton.disabled = true;
-    closeRacePhysiologyEditor();
-  } else {
-    if (editButton) {
-      editButton.disabled = false;
-      editButton.textContent = getRacePhysiologyOverride(selectedRaceEncyclopedia) ? '编辑覆盖' : '调整参数';
-    }
-    if (editorModal) editorModal.hidden = !racePhysiologyEditorOpen;
-    if (editorTitle) editorTitle.textContent = `${selectedRaceEncyclopedia} 参数覆盖`;
-    if (racePhysiologyEditorOpen) renderRacePhysiologyEditor(selectedRaceEncyclopedia);
-    const embryoType = getEmbryoTypeByRace(selectedRaceEncyclopedia);
-    const embryoText = getEmbryoTypeReferenceText(embryoType);
-    const physiologyText = buildSingleRacePhysiologyText(selectedRaceEncyclopedia);
-    outputNode.textContent = [physiologyText, embryoText].filter(Boolean).join('\n\n');
-  }
-
-  if (!selectedDerivedEncyclopedia) {
-    derivedOutputNode.textContent = '暂无可显示的衍生资料。';
-    if (derivedEditButton) derivedEditButton.disabled = true;
-    closeDerivedTypeEditor();
-    return;
-  }
-
-  if (derivedEditButton) {
-    derivedEditButton.disabled = false;
-    derivedEditButton.textContent = getDerivedTypeOverride(selectedDerivedEncyclopedia) ? '编辑覆盖' : '调整参数';
-  }
-  if (derivedEditorModal) derivedEditorModal.hidden = !derivedTypeEditorOpen;
-  if (derivedEditorTitle) derivedEditorTitle.textContent = selectedDerivedEncyclopedia + ' 参数覆盖';
-  if (derivedTypeEditorOpen) renderDerivedTypeEditor(selectedDerivedEncyclopedia);
-
-  const fluxProfile = getDerivedTypeFluxProfile(selectedDerivedEncyclopedia);
-  const introductionLine = getDerivedTypeIntroductionLine(selectedDerivedEncyclopedia);
-  const fluxName = String(fluxProfile?.fluxName || '未知').trim() || '未知';
-  const fluxDefinition = String(fluxProfile?.fluxDefinition || '').trim();
-  const exemptions = getDerivedTypeMetabolismExemptions(selectedDerivedEncyclopedia);
-  const inheritanceSpeed = Number(getDerivedTypeInheritanceProfile(selectedDerivedEncyclopedia)?.inheritanceSpeed);
-  derivedOutputNode.textContent = [
-    `【${selectedDerivedEncyclopedia}】`,
-    ...(introductionLine ? [introductionLine] : []),
-    `- Flux: ${fluxName}`,
-    `- 代谢抵免: ${exemptions.length > 0 ? exemptions.join(' / ') : '无'}`,
-    `- 遗传速度: ${Number.isFinite(inheritanceSpeed) ? inheritanceSpeed : '未知'}x`,
-    fluxDefinition || '- 暂无额外说明。',
-  ].join('\n\n');
-}
-
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -2157,72 +1694,6 @@ async function inspectCurrentCharacterWorldbook(ctx) {
   };
 }
 
-function buildRacePaletteDescriptor(state = racePaletteState) {
-  const raceLabel = Array.isArray(state?.raceTags) ? state.raceTags.map((item) => String(item || '').trim()).filter(Boolean).join('x') : '';
-  const derivedBase = String(state?.selectedDerivedType || '').trim();
-  const derivedSubtype = String(state?.derivedSubtype || '').trim();
-  const derivedType = derivedBase ? `${derivedBase}${derivedSubtype ? `-${derivedSubtype}` : ''}` : '';
-  if (derivedType && raceLabel) return `[${derivedType}]${raceLabel}`;
-  return raceLabel || (derivedType ? `[${derivedType}]` : '');
-}
-
-function isRegisterRaceTarget(targetInputId = '') {
-  return String(targetInputId || '') === 'bs-bt-register-race';
-}
-
-function renderRacePaletteSelect(selectId, currentValue, includeEmpty = false) {
-  const options = [];
-  if (includeEmpty) options.push('<option value="">不设</option>');
-  for (const group of RACE_PALETTE_GROUPS) {
-    const groupOptions = group.races.map((race) => `<option value="${escapeHtml(race)}"${race === currentValue ? ' selected' : ''}>${escapeHtml(race)}</option>`).join('');
-    options.push(`<optgroup label="${escapeHtml(`${group.label} (${group.races.length})`)}">${groupOptions}</optgroup>`);
-  }
-  return `<select id="${selectId}">${options.join('')}</select>`;
-}
-
-function renderRacePaletteBody() {
-  const isRegister = isRegisterRaceTarget(racePaletteState.targetInputId);
-  const derivedOptions = [`<option value="">不设</option>`, ...DERIVED_TYPE_RACES.map((value) => `<option value="${escapeHtml(value)}"${racePaletteState.selectedDerivedType === value ? ' selected' : ''}>${escapeHtml(value)}</option>`)];
-  const raceTags = Array.isArray(racePaletteState.raceTags) && racePaletteState.raceTags.length > 0
-    ? racePaletteState.raceTags.map((entry, index) => `
-        <button type="button" class="bs-bt-race-tag" data-race-remove-index="${index}" title="移除此项">
-          <span>${escapeHtml(entry)}</span>
-          <span aria-hidden="true">×</span>
-        </button>
-      `).join('')
-    : `<div class="bs-bt-race-preview-hint">${isRegister ? '尚未加入角色种族 tag。' : '尚未加入这位父亲的种族 tag。'}</div>`;
-  return `
-    <div class="bs-bt-race-palette">
-      <div class="bs-bt-race-palette-head">
-        <div class="bs-bt-race-palette-title">${isRegister ? '角色种族调色盘' : '父源调色盘'}</div>
-        <button type="button" class="bs-bt-race-close-button" data-race-action="cancel" aria-label="关闭调色盘" title="关闭调色盘">×</button>
-      </div>
-      <div class="bs-bt-race-preview-hint">${isRegister ? '先把角色种族逐个加入 tag，衍生型会套在整体种族上；确认后会直接写入注册种族并关闭。' : '先把种族逐个加入 tag，衍生型会套在整位父亲上；确认后会直接写入父亲种族并关闭。'}</div>
-      <div class="bs-bt-race-tag-list">${raceTags}</div>
-      <label class="bs-bt-track-debug-field">
-        <span class="bs-bt-track-debug-label">衍生型</span>
-        <select id="bs-bt-race-derived">${derivedOptions.join('')}</select>
-      </label>
-      <label class="bs-bt-track-debug-field">
-        <span class="bs-bt-track-debug-label">衍生子项(自定义)</span>
-        <input id="bs-bt-race-derived-subtype" class="text_pole" type="text" value="${escapeHtml(racePaletteState.derivedSubtype || '')}" placeholder="例如：魔女、僵尸" />
-      </label>
-      <label class="bs-bt-track-debug-field">
-        <span class="bs-bt-track-debug-label">种族</span>
-        ${renderRacePaletteSelect('bs-bt-race-primary', racePaletteState.selectedRace || '人类')}
-      </label>
-      <label class="bs-bt-track-debug-field">
-        <span class="bs-bt-track-debug-label">子项(自定义)</span>
-        <input id="bs-bt-race-subtype" class="text_pole" type="text" value="${escapeHtml(racePaletteState.subtype || '')}" placeholder="例如：鼠族、炎裔" />
-      </label>
-      <div class="bs-bt-race-actions">
-        <button type="button" class="menu_button" data-race-action="append">加入种族 tag</button>
-        <button type="button" class="menu_button" data-race-action="confirm">确认</button>
-      </div>
-    </div>
-  `;
-}
-
 function isPregnantStage(stage) {
   return ['已着床', ...PREGNANCY_STAGES, '产兆前驱', ...LABOR_STAGES].includes(String(stage || ''));
 }
@@ -2296,6 +1767,23 @@ function getStageProgress(profile) {
       displayStartAtOne: true,
     };
   }
+  if (stage === '产后恢复') {
+    const recoveryDays = Math.max(1, Math.min(9999, Number(profile?.bio?.recoveryDays) || 56));
+    return { label: '阶段进度', value: Number(base.days) || 0, max: recoveryDays, unit: 'd', displayStartAtOne: true };
+  }
+  if (stage === '哺乳期') {
+    // 用进废退：无界显示「哺乳已多久」；断奶计时（daysSinceMilkRelief）才是退出条件
+    return { label: '哺乳时长', value: Number(base.days) || 0, unbounded: true, unit: 'd', displayStartAtOne: true };
+  }
+  if (stage === '围绝经期晚期') {
+    return { label: '阶段进度', value: Number(base.days) || 0, max: 7, unit: 'd', displayStartAtOne: true };
+  }
+  if (stage === '停经') {
+    return { label: '停经时长', value: Number(base.days) || 0, unbounded: true, unit: 'd', displayStartAtOne: true };
+  }
+  if (stage === '无经期') {
+    return { label: '阶段进度', value: Number(base.days) || 0, unbounded: true, unit: 'd', displayStartAtOne: true };
+  }
   return { label: '阶段进度', value: Number(base.days) || 0, max: 1, unit: 'd', displayStartAtOne: true };
 }
 
@@ -2306,45 +1794,8 @@ function wrapLaborAngle(angle) {
 }
 
 function getLaborPositionDifficulty(angle, fetus) {
+  // 人类锁死：只剩胎生的角度规则，其余胚型的特化难度随种族系统移除。
   const normalized = wrapLaborAngle(angle);
-  const embryoType = String(fetus?.embryoType || '胎生');
-
-  if (embryoType === '胎转卵生') {
-    const targetAngles = [0, 90, 180, 270, 360];
-    let minDistance = 360;
-    for (const targetAngle of targetAngles) {
-      let distance = Math.abs(normalized - targetAngle);
-      if (targetAngle === 360) distance = Math.min(distance, Math.abs(normalized - 0));
-      if (distance < minDistance) minDistance = distance;
-    }
-    if (minDistance <= 5) return 1.5;
-    return Math.min(2.25, 1.5 + ((minDistance - 5) * 0.075));
-  }
-
-  if (embryoType === '不定型') {
-    const race = String(fetus?.race || '人类');
-    const combinedSeed = Math.round(normalized * 1000) + race.charCodeAt(0) + race.charCodeAt(Math.max(0, race.length - 1));
-    const seededValue = ((combinedSeed * 1664525 + 1013904223) % 2147483648) / 2147483648;
-    return 1.0 + seededValue;
-  }
-
-  if (embryoType === '卵胎生') {
-    if ((normalized >= 0 && normalized <= 5) || (normalized >= 355 && normalized <= 360)) return 1.0;
-    if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.25;
-    if (normalized >= 175 && normalized <= 185) return 1.5;
-    if (normalized >= 165 && normalized <= 195) return 1.75;
-    if ((normalized >= 85 && normalized <= 95) || (normalized >= 275 && normalized <= 285)) return 2.0;
-    if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 2.25;
-    return 1.33;
-  }
-
-  if (embryoType === '卵生') {
-    if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.0;
-    if (normalized >= 165 && normalized <= 195) return 1.0;
-    if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 1.5;
-    return 1.33;
-  }
-
   if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.0;
   if (normalized >= 165 && normalized <= 195) return 1.5;
   if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 2.0;
@@ -2427,34 +1878,6 @@ function getMetabolismLevel(value, cap = 150) {
   return '无';
 }
 
-function getDerivedFluxSummary(value, cap = 150) {
-  const next = Number(value) || 0;
-  const abs = Math.abs(next);
-  const scale = Math.max(1, Number(cap) || 150) / 150;
-  const polarity = next >= 0 ? '正极' : '负极';
-  let stage = '平衡';
-  let description = '需求接近平衡，暂时没有明显偏向。';
-
-  if (abs >= 125 * scale) {
-    stage = `${polarity}爆发`;
-    description = `需求已严重偏向${polarity}，应尽快解放，否则容易压过理智与自控。`;
-  } else if (abs >= 100 * scale) {
-    stage = `${polarity}饱和`;
-    description = `需求已高度集中于${polarity}，再继续累积就会逼近失衡边缘。`;
-  } else if (abs >= 75 * scale) {
-    stage = `${polarity}高涨`;
-    description = `需求明显偏向${polarity}，已进入需要认真处理的危险区。`;
-  } else if (abs >= 50 * scale) {
-    stage = `${polarity}活跃`;
-    description = `需求正稳定向${polarity}偏移，已经能感受到持续牵引。`;
-  } else if (abs >= 25 * scale) {
-    stage = `${polarity}浮动`;
-    description = `需求轻度偏向${polarity}，目前仍属于可控范围。`;
-  }
-
-  return `${stage} (${Math.round(next)})：${description}`;
-}
-
 const METABOLISM_NEED_LABELS = Object.freeze({
   excretion: '泄意',
   hunger: '饿意',
@@ -2462,7 +1885,6 @@ const METABOLISM_NEED_LABELS = Object.freeze({
   milk: '乳意',
   odor: '臭意',
   companionship: '伴意',
-  flux: '极需',
 });
 
 const DEBUG_BLOCKAGE_LABELS = Object.freeze({
@@ -2472,8 +1894,6 @@ const DEBUG_BLOCKAGE_LABELS = Object.freeze({
   milk: '乳意',
   odor: '臭意',
   companionship: '伴意',
-  fluxPositive: '极需正极',
-  fluxNegative: '极需负极',
 });
 
 const DEBUG_BLOCKAGE_DEFAULT_SEVERITY = Object.freeze({
@@ -2483,8 +1903,6 @@ const DEBUG_BLOCKAGE_DEFAULT_SEVERITY = Object.freeze({
   milk: 0.55,
   odor: 0.45,
   companionship: 0.55,
-  fluxPositive: 0.65,
-  fluxNegative: 0.65,
 });
 
 function clampUiNumber(value, min, max, fallback = 0) {
@@ -2495,28 +1913,19 @@ function clampUiNumber(value, min, max, fallback = 0) {
 
 function normalizeMetabolismNeed(key, metabolism = {}, blockage = null, acceleration = null, expansion = null) {
   const expansionKey = String(expansion?.key || '');
-  const rawValue = Number(metabolism[key]) || 0;
-  const expanded = key === 'flux'
-    ? (rawValue > 0 && expansionKey === 'fluxPositive') || (rawValue < 0 && expansionKey === 'fluxNegative')
-    : expansionKey === key;
+  const expanded = expansionKey === key;
   const cap = expanded ? 200 : 150;
-  const value = key === 'flux'
-    ? clampUiNumber(metabolism[key], -cap, cap, 0)
-    : clampUiNumber(metabolism[key], 0, cap, 0);
+  const value = clampUiNumber(metabolism[key], 0, cap, 0);
   const blockageKey = String(blockage?.key || '');
   const accelerationKey = String(acceleration?.key || '');
-  const blocked = key === 'flux'
-    ? (value > 0 && blockageKey === 'fluxPositive') || (value < 0 && blockageKey === 'fluxNegative')
-    : blockageKey === key;
-  const accelerated = key === 'flux'
-    ? (value > 0 && accelerationKey === 'fluxPositive') || (value < 0 && accelerationKey === 'fluxNegative')
-    : accelerationKey === key;
+  const blocked = blockageKey === key;
+  const accelerated = accelerationKey === key;
   return {
     key,
     label: METABOLISM_NEED_LABELS[key] || key,
     value,
     cap,
-    level: key === 'flux' ? getDerivedFluxSummary(value, cap) : getMetabolismLevel(value, cap),
+    level: getMetabolismLevel(value, cap),
     blocked,
     blockageSeverity: blocked ? clampUiNumber(blockage?.severity, 0, 1, 0) : 0,
     accelerated,
@@ -2525,22 +1934,8 @@ function normalizeMetabolismNeed(key, metabolism = {}, blockage = null, accelera
   };
 }
 
-function getMetabolismSummary(metabolism = {}, immune = {}, derivedType = null, blockage = null, acceleration = null, expansion = null) {
+function getMetabolismSummary(metabolism = {}, immune = {}, blockage = null, acceleration = null, expansion = null) {
   if (immune?.metabolism) return '代谢免疫';
-  if (derivedType) {
-    const exemptions = new Set(getDerivedTypeMetabolismExemptions(derivedType));
-    const visible = (key) => (exemptions.has(key) ? null : normalizeMetabolismNeed(key, metabolism, blockage, acceleration, expansion));
-    return {
-      flux: normalizeMetabolismNeed('flux', metabolism, blockage, acceleration, expansion),
-      hunger: visible('hunger'),
-      sleep: visible('sleep'),
-      excretion: visible('excretion'),
-      milk: visible('milk'),
-      odor: visible('odor'),
-      companionship: visible('companionship'),
-      derived: true,
-    };
-  }
   return {
     hunger: normalizeMetabolismNeed('hunger', metabolism, blockage, acceleration, expansion),
     sleep: normalizeMetabolismNeed('sleep', metabolism, blockage, acceleration, expansion),
@@ -2555,7 +1950,7 @@ const METABOLISM_DISPLAY_ORDER = Object.freeze(['excretion', 'hunger', 'sleep', 
 
 function getMetabolismNeedItems(summary) {
   if (!summary || typeof summary !== 'object') return [];
-  const items = summary.derived ? [summary.flux] : [];
+  const items = [];
   for (const key of METABOLISM_DISPLAY_ORDER) {
     if (summary[key]) items.push(summary[key]);
   }
@@ -2566,20 +1961,11 @@ function renderMetabolismNeedIcon(item) {
   const key = String(item?.key || '');
   const value = Number(item?.value) || 0;
   const cap = Number(item?.cap) === 200 ? 200 : 150;
-  const fillValue = key === 'flux' ? Math.abs(value) : value;
-  const fill = key === 'flux'
-    ? Math.max(0, Math.min(100, (fillValue / cap) * 100))
-    : Math.max(0, Math.min(100, (fillValue / 100) * 100));
-  const overfill = key === 'flux'
-    ? 0
-    : Math.max(0, Math.min(100, ((fillValue - 100) / (cap - 100)) * 100));
-  const tone = key === 'flux'
-    ? value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'
-    : value >= 100 ? 'high' : 'normal';
-  const title = `${item.label}: ${item.level}${key === 'flux' ? '' : ` (${Math.round(value)})`}${item.blocked ? `；阻塞 ${Math.round((item.blockageSeverity || 0) * 100)}%` : ''}${item.accelerated ? `；快积 ${Math.round((item.accelerationSeverity || 0) * 100)}%` : ''}${item.expanded ? '；扩容至 200' : ''}`;
-  const displayValue = key === 'flux'
-    ? (value > 0 ? '正极' : value < 0 ? '负极' : '平衡')
-    : String(Math.round(value));
+  const fill = Math.max(0, Math.min(100, (value / 100) * 100));
+  const overfill = Math.max(0, Math.min(100, ((value - 100) / (cap - 100)) * 100));
+  const tone = value >= 100 ? 'high' : 'normal';
+  const title = `${item.label}: ${item.level} (${Math.round(value)})${item.blocked ? `；阻塞 ${Math.round((item.blockageSeverity || 0) * 100)}%` : ''}${item.accelerated ? `；快积 ${Math.round((item.accelerationSeverity || 0) * 100)}%` : ''}${item.expanded ? '；扩容至 200' : ''}`;
+  const displayValue = String(Math.round(value));
   return `
     <div class="bs-bt-need-tile bs-bt-need-tile--${escapeHtml(key)} bs-bt-need-tile--${tone}${item.blocked ? ' is-blocked' : ''}${item.accelerated ? ' is-accelerated' : ''}${item.expanded ? ' is-expanded' : ''}" aria-label="${escapeHtml(title)}">
       ${item.blocked ? '<span class="bs-bt-need-blockage" aria-hidden="true"></span>' : ''}
@@ -2590,9 +1976,9 @@ function renderMetabolismNeedIcon(item) {
         <span class="bs-bt-need-icon-fill" aria-hidden="true">
           <span class="bs-bt-need-icon bs-bt-need-icon--${escapeHtml(key)}"></span>
         </span>
-        ${key === 'flux' ? '' : `<span class="bs-bt-need-icon-overfill" aria-hidden="true">
+        <span class="bs-bt-need-icon-overfill" aria-hidden="true">
           <span class="bs-bt-need-icon bs-bt-need-icon--${escapeHtml(key)}"></span>
-        </span>`}
+        </span>
       </span>
       <span class="bs-bt-need-label">${escapeHtml(item.label)}</span>
       <span class="bs-bt-need-value">${escapeHtml(displayValue)}</span>
@@ -2603,7 +1989,7 @@ function renderMetabolismNeedIcon(item) {
 function renderMetabolismSummary(summary) {
   if (typeof summary === 'string') return `<div>${escapeHtml(summary)}</div>`;
   const items = getMetabolismNeedItems(summary);
-  return `<div class="bs-bt-track-metabolism-grid${summary?.derived ? ' is-derived' : ''}">${items.map(renderMetabolismNeedIcon).join('')}</div>`;
+  return `<div class="bs-bt-track-metabolism-grid">${items.map(renderMetabolismNeedIcon).join('')}</div>`;
 }
 
 function parseDescriptionBlocks(text) {
@@ -3088,7 +2474,6 @@ function buildTrackCharacterViewModel(character) {
       stage,
     },
     overview: {
-      raceLabel: formatRaceLabel(base.race, base.derivedType),
       age: Number.isFinite(Number(base.age)) ? Math.round(Number(base.age)) : null,
       stage,
       stageProgress: getStageProgress(profile),
@@ -3106,7 +2491,7 @@ function buildTrackCharacterViewModel(character) {
         },
         { label: '宫压', value: Number(base.uterinePressure) || 0, cap: getUterinePressureCap(stage, profile) },
       ],
-      metabolismSummary: getMetabolismSummary(profile.metabolism, immune, base.derivedType, pregnant.blockage, pregnant.acceleration, pregnant.expansion),
+      metabolismSummary: getMetabolismSummary(profile.metabolism, immune, pregnant.blockage, pregnant.acceleration, pregnant.expansion),
     },
     description: {
       normalBlocks: parseDescriptionBlocks(descriptions.normalDescription),
@@ -3192,7 +2577,6 @@ function buildTrackCharacterViewModel(character) {
         fetuses: Array.isArray(pregnant.fetuses) ? pregnant.fetuses.length : 0,
         children: Array.isArray(profile.children) ? profile.children.length : 0,
       },
-      derivedType: String(base.derivedType || '').trim(),
       blockage: pregnant.blockage && typeof pregnant.blockage === 'object' ? {
         key: String(pregnant.blockage.key || ''),
         severity: Number(pregnant.blockage.severity) || 0,
@@ -3321,7 +2705,6 @@ function renderTrackOverview(viewModel) {
       <div class="bs-bt-track-section-title">角色概览</div>
       <div class="bs-bt-track-meta">
         <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">姓名</span><span class="bs-bt-track-meta-value">${escapeHtml(viewModel.name)}</span></div>
-        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">种族</span><span class="bs-bt-track-meta-value">${escapeHtml(viewModel.overview.raceLabel)}</span></div>
         <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">年龄</span><span class="bs-bt-track-meta-value">${escapeHtml(viewModel.overview.age ?? '未知')}</span></div>
       </div>
     </div>
@@ -3474,7 +2857,6 @@ function renderTrackPregnancy(viewModel) {
       (item, index) => `<div class="bs-bt-track-card">
           <div class="bs-bt-track-card-title">来源 ${index + 1}</div>
           <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">对象</span><span class="bs-bt-track-list-value">${escapeHtml(item?.male || '未知')}</span></div>
-          <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">种族</span><span class="bs-bt-track-list-value">${escapeHtml(formatRaceLabel(item?.race, item?.derivedType))}</span></div>
           <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">残留量</span><span class="bs-bt-track-list-value">${Math.round(Number(item?.value) || 0)}</span></div>
         </div>`,
       '当前无精液残留',
@@ -3497,8 +2879,6 @@ function renderTrackPregnancy(viewModel) {
             ? `<div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">嵌合来源</span><span class="bs-bt-track-list-value">${escapeHtml(`${Number(item.chimera.sourceCount) || 2} 颗受精卵`)}</span></div>`
             : ''
           }
-                <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">父方种族</span><span class="bs-bt-track-list-value">${escapeHtml(formatRaceLabel(item?.fatherRace, item?.fatherDerivedType))}</span></div>
-                <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">胚型</span><span class="bs-bt-track-list-value">${escapeHtml(item?.embryoType || '未知')}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">性别</span><span class="bs-bt-track-list-value">${escapeHtml(item?.gender || '未知')}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">体重倍率</span><span class="bs-bt-track-list-value">${escapeHtml(formatFixedDisplay(item?.weight, 2))}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">胎位角</span><span class="bs-bt-track-list-value">${escapeHtml(`${formatIntegerDisplay(item?.tendencyAngle)}°`)}</span></div>
@@ -3901,14 +3281,11 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
   const counts = viewModel.debug?.counts || {};
   const hasConceptionState = Boolean(viewModel.debug?.hasConceptionState);
   const gestationModifier = viewModel.debug?.gestationModifier || {};
-  const derivedType = String(viewModel.debug?.derivedType || '').trim();
   const currentStage = viewModel.base?.stage || '';
   const currentBlockageKey = String(viewModel.debug?.blockage?.key || '');
   const currentAccelerationKey = String(viewModel.debug?.acceleration?.key || '');
   const currentExpansionKey = String(viewModel.debug?.expansion?.key || '');
-  const blockageExemptions = derivedType ? new Set(getDerivedTypeMetabolismExemptions(derivedType)) : new Set();
-  const blockageKeys = METABOLISM_DISPLAY_ORDER.filter((key) => !blockageExemptions.has(key));
-  if (derivedType) blockageKeys.push('fluxPositive', 'fluxNegative');
+  const blockageKeys = METABOLISM_DISPLAY_ORDER;
   const blockageOptions = [
     `<option value=""${currentBlockageKey ? '' : ' selected'}>无</option>`,
     ...blockageKeys.map((key) =>
@@ -3938,13 +3315,12 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
     ? Math.round(Math.max(0, Math.min(100, (Number(viewModel.overview.stageProgress.value) / Number(viewModel.overview.stageProgress.max)) * 100)))
     : 0;
 
-  const phaseOptions = ['卵泡期', '排卵期', '黄体期', '月经期', '假孕期', '产后恢复'].map(phase =>
+  const phaseOptions = ['卵泡期', '排卵期', '黄体期', '月经期', '假孕期', '产后恢复', '哺乳期'].map(phase =>
     `<option value="${phase}"${currentStage === phase ? ' selected' : ''}>${phase}</option>`
   ).join('');
 
   const defaultFather = String(getContextSafe()?.name1 || '').trim();
   const fatherValue = escapeHtml(debugInjectDraft.father || defaultFather);
-  const raceValue = escapeHtml(debugInjectDraft.race || '人类');
   const countValue = escapeHtml(debugInjectDraft.fetusCount || '1');
   const gendersValue = escapeHtml(debugInjectDraft.genders || '女');
   const daysValue = escapeHtml(debugInjectDraft.equivalentDays || '0');
@@ -3953,9 +3329,6 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
   const modifierMultiplierValue = escapeHtml(modifierDraftActive ? debugGestationModifierDraft.multiplier : String(gestationModifier.multiplier ?? 1));
   const modifierDescriptionValue = escapeHtml(modifierDraftActive ? debugGestationModifierDraft.description : (gestationModifier.description || ''));
   const fetalActivityTextValue = escapeHtml(debugFetalActivityDraft.owner === selectedTrackName ? debugFetalActivityDraft.text : '');
-  const palette = racePaletteState.targetInputId === 'bs-bt-debug-race' && racePaletteState.isOpen
-    ? `<div class="bs-bt-race-popover">${renderRacePaletteBody()}</div>`
-    : '';
   return `
     <div class="bs-bt-track-section">
       <div class="bs-bt-track-section-title">快捷调试</div>
@@ -4044,16 +3417,6 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
           <input id="bs-bt-debug-father" class="text_pole" type="text" value="${fatherValue}" placeholder="可用逗号分隔，默认当前 user" />
         </label>
         <label class="bs-bt-track-debug-field">
-          <span class="bs-bt-track-debug-label">父亲种族</span>
-          <div class="bs-bt-race-picker-wrap">
-            <div class="bs-bt-race-input-row">
-              <input id="bs-bt-debug-race" class="text_pole" type="text" value="${raceValue}" placeholder="可用逗号分隔，默认人类" />
-              <button type="button" class="bs-bt-race-picker-button" data-race-picker-target="bs-bt-debug-race" title="种族调色盘" aria-label="种族调色盘">☥</button>
-            </div>
-            ${palette}
-          </div>
-        </label>
-        <label class="bs-bt-track-debug-field">
           <span class="bs-bt-track-debug-label">胎数</span>
           <input id="bs-bt-debug-count" class="text_pole" type="number" min="1" max="9" value="${countValue}" />
         </label>
@@ -4067,7 +3430,7 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
         </label>
         <button type="button" class="menu_button" data-debug-action="inject-pregnancy">执行注入</button>
       </fieldset>
-      <div class="bs-bt-track-debug-hint">${hasConceptionState ? '当前角色已有受精或妊娠状态，已禁用此操作。' : '父亲名字、父亲种族、性别都可用逗号逐胎填写；填一位父亲 + 胎数 > 1 = 同父多胎；填多位父亲 = 异父妊娠。'}</div>
+      <div class="bs-bt-track-debug-hint">${hasConceptionState ? '当前角色已有受精或妊娠状态，已禁用此操作。' : '父亲名字、性别都可用逗号逐胎填写；填一位父亲 + 胎数 > 1 = 同父多胎；填多位父亲 = 异父妊娠。'}</div>
     </div>
     <div class="bs-bt-track-section" style="margin-top: 10px;">
       <div class="bs-bt-track-section-title">产兆前驱调试</div>
@@ -4181,7 +3544,6 @@ function injectSelectedTrackPregnancy(ctx) {
   const chatState = getChatState(ctx, settings);
   debugInjectDraft = {
     father: String(document.getElementById('bs-bt-debug-father')?.value || '').trim(),
-    race: String(document.getElementById('bs-bt-debug-race')?.value || '人类').trim() || '人类',
     fetusCount: String(document.getElementById('bs-bt-debug-count')?.value || '1'),
     genders: String(document.getElementById('bs-bt-debug-genders')?.value || '').trim(),
     equivalentDays: String(document.getElementById('bs-bt-debug-days')?.value || '0'),
@@ -4191,7 +3553,6 @@ function injectSelectedTrackPregnancy(ctx) {
     arguments: {
       female: selectedTrackName,
       father: debugInjectDraft.father || String(getContextSafe()?.name1 || '').trim(),
-      race: debugInjectDraft.race || '人类',
       fetusCount: Number(debugInjectDraft.fetusCount || 1),
       genders: debugInjectDraft.genders,
       equivalentDays: Number(debugInjectDraft.equivalentDays || 0),
@@ -4333,10 +3694,6 @@ function clampSelectedTrackExpansionCapacity(profile) {
     const cap = expansionKey === key ? 200 : 150;
     metabolism[key] = Math.max(0, Math.min(cap, Number(metabolism[key]) || 0));
   }
-  const flux = Number(metabolism.flux) || 0;
-  const isExpandedFlux = (flux > 0 && expansionKey === 'fluxPositive') || (flux < 0 && expansionKey === 'fluxNegative');
-  const fluxCap = isExpandedFlux ? 200 : 150;
-  metabolism.flux = Math.max(-fluxCap, Math.min(fluxCap, flux));
 }
 
 function setSelectedTrackBlockage(ctx, key) {
@@ -4347,13 +3704,7 @@ function setSelectedTrackBlockage(ctx, key) {
   if (!character?.profile) return;
 
   const profile = character.profile;
-  const derivedType = String(profile?.base?.derivedType || '').trim();
-  const exemptions = derivedType ? new Set(getDerivedTypeMetabolismExemptions(derivedType)) : new Set();
-  const allowed = new Set(METABOLISM_DISPLAY_ORDER.filter((item) => !exemptions.has(item)));
-  if (derivedType) {
-    allowed.add('fluxPositive');
-    allowed.add('fluxNegative');
-  }
+  const allowed = new Set(METABOLISM_DISPLAY_ORDER);
 
   const nextKey = String(key || '').trim();
   profile.pregnant = profile.pregnant && typeof profile.pregnant === 'object' ? profile.pregnant : {};
@@ -4391,13 +3742,7 @@ function setSelectedTrackAcceleration(ctx, key) {
   if (!character?.profile) return;
 
   const profile = character.profile;
-  const derivedType = String(profile?.base?.derivedType || '').trim();
-  const exemptions = derivedType ? new Set(getDerivedTypeMetabolismExemptions(derivedType)) : new Set();
-  const allowed = new Set(METABOLISM_DISPLAY_ORDER.filter((item) => !exemptions.has(item)));
-  if (derivedType) {
-    allowed.add('fluxPositive');
-    allowed.add('fluxNegative');
-  }
+  const allowed = new Set(METABOLISM_DISPLAY_ORDER);
   const nextKey = String(key || '').trim();
   profile.pregnant = profile.pregnant && typeof profile.pregnant === 'object' ? profile.pregnant : {};
   if (!nextKey) {
@@ -4433,13 +3778,7 @@ function setSelectedTrackExpansion(ctx, key) {
   if (!character?.profile) return;
 
   const profile = character.profile;
-  const derivedType = String(profile?.base?.derivedType || '').trim();
-  const exemptions = derivedType ? new Set(getDerivedTypeMetabolismExemptions(derivedType)) : new Set();
-  const allowed = new Set(METABOLISM_DISPLAY_ORDER.filter((item) => !exemptions.has(item)));
-  if (derivedType) {
-    allowed.add('fluxPositive');
-    allowed.add('fluxNegative');
-  }
+  const allowed = new Set(METABOLISM_DISPLAY_ORDER);
   const nextKey = String(key || '').trim();
   profile.pregnant = profile.pregnant && typeof profile.pregnant === 'object' ? profile.pregnant : {};
   if (!nextKey) {
@@ -4550,9 +3889,6 @@ function bindDebugPanelControls(ctx, root, refresh = () => renderFullStatePage(c
   root.querySelector('#bs-bt-debug-father')?.addEventListener('input', (event) => {
     debugInjectDraft.father = String(event.target?.value || '');
   });
-  root.querySelector('#bs-bt-debug-race')?.addEventListener('input', (event) => {
-    debugInjectDraft.race = String(event.target?.value || '');
-  });
   root.querySelector('#bs-bt-debug-count')?.addEventListener('input', (event) => {
     debugInjectDraft.fetusCount = String(event.target?.value || '1');
   });
@@ -4582,95 +3918,6 @@ function bindDebugPanelControls(ctx, root, refresh = () => renderFullStatePage(c
     debugGestationModifierDraft.owner = selectedTrackName;
     debugGestationModifierDraft.description = String(event.target?.value || '');
   });
-  root.querySelectorAll('[data-race-picker-target]').forEach((node) =>
-    node.addEventListener('click', () => {
-      const target = String(node.dataset.racePickerTarget || '');
-      if (racePaletteState.isOpen && racePaletteState.targetInputId === target) closeRacePalettePopover();
-      else openRacePalettePopover(target);
-      refresh();
-    }),
-  );
-  root.querySelector('#bs-bt-race-derived')?.addEventListener('change', (event) => {
-    racePaletteState.selectedDerivedType = String(event.target?.value || '');
-    refresh();
-  });
-  root.querySelector('#bs-bt-race-derived-subtype')?.addEventListener('input', (event) => {
-    racePaletteState.derivedSubtype = String(event.target?.value || '');
-  });
-  root.querySelector('#bs-bt-race-primary')?.addEventListener('change', (event) => {
-    racePaletteState.selectedRace = String(event.target?.value || '人类');
-    refresh();
-  });
-  root.querySelector('#bs-bt-race-subtype')?.addEventListener('input', (event) => {
-    racePaletteState.subtype = String(event.target?.value || '');
-  });
-  root.querySelectorAll('[data-race-remove-index]').forEach((node) =>
-    node.addEventListener('click', () => {
-      const index = Number(node.getAttribute('data-race-remove-index'));
-      if (!Number.isInteger(index) || index < 0) return;
-      racePaletteState.raceTags = racePaletteState.raceTags.filter((_, entryIndex) => entryIndex !== index);
-      refresh();
-    }),
-  );
-  root.querySelector('[data-race-action="append"]')?.addEventListener('click', () => {
-    const raceName = String(racePaletteState.selectedRace || '').trim();
-    const subtype = String(racePaletteState.subtype || '').trim();
-    const raceTag = raceName ? `${raceName}${subtype ? `-${subtype}` : ''}` : '';
-    if (!raceTag) {
-      globalThis.toastr?.warning?.('[BS BioTracker] 请先选择种族');
-      return;
-    }
-    racePaletteState.raceTags = [...racePaletteState.raceTags, raceTag];
-    racePaletteState.selectedRace = '人类';
-    racePaletteState.subtype = '';
-    refresh();
-  });
-  root.querySelector('[data-race-action="cancel"]')?.addEventListener('click', () => {
-    closeRacePalettePopover();
-    refresh();
-    refreshRegisterRacePalette();
-  });
-  root.querySelector('[data-race-action="confirm"]')?.addEventListener('click', () => {
-    const descriptor = buildRacePaletteDescriptor(racePaletteState);
-    if (!descriptor) {
-      globalThis.toastr?.warning?.('[BS BioTracker] 请先加入至少一个种族 tag');
-      return;
-    }
-    const target = document.getElementById(racePaletteState.targetInputId);
-    if (!target) return;
-    const current = String(target.value || '').trim();
-    target.value = isRegisterRaceTarget(racePaletteState.targetInputId) ? descriptor : (current ? `${current},${descriptor}` : descriptor);
-    if (racePaletteState.targetInputId === 'bs-bt-debug-race') {
-      debugInjectDraft.race = target.value;
-    }
-    closeRacePalettePopover();
-    refresh();
-    refreshRegisterRacePalette();
-  });
-}
-
-function openRacePalettePopover(targetInputId) {
-  racePaletteState = {
-    targetInputId,
-    isOpen: true,
-    selectedRace: '人类',
-    selectedDerivedType: '',
-    derivedSubtype: '',
-    subtype: '',
-    raceTags: [],
-  };
-}
-
-function closeRacePalettePopover() {
-  racePaletteState.isOpen = false;
-}
-
-function refreshRegisterRacePalette() {
-  const anchor = document.getElementById('bs-bt-register-race-palette-anchor');
-  if (!anchor) return;
-  anchor.innerHTML = racePaletteState.targetInputId === 'bs-bt-register-race' && racePaletteState.isOpen
-    ? `<div class="bs-bt-race-popover">${renderRacePaletteBody()}</div>`
-    : '';
 }
 
 function populateModelList(settings) {
@@ -4889,9 +4136,6 @@ function renderStatusPanel(ctx) {
   content.querySelector('#bs-bt-debug-father')?.addEventListener('input', (event) => {
     debugInjectDraft.father = String(event.target?.value || '');
   });
-  content.querySelector('#bs-bt-debug-race')?.addEventListener('input', (event) => {
-    debugInjectDraft.race = String(event.target?.value || '');
-  });
   content.querySelector('#bs-bt-debug-count')?.addEventListener('input', (event) => {
     debugInjectDraft.fetusCount = String(event.target?.value || '1');
   });
@@ -4920,71 +4164,6 @@ function renderStatusPanel(ctx) {
   content.querySelector('#bs-bt-debug-gestation-description')?.addEventListener('input', (event) => {
     debugGestationModifierDraft.owner = selectedTrackName;
     debugGestationModifierDraft.description = String(event.target?.value || '');
-  });
-  content.querySelectorAll('[data-race-picker-target]').forEach((node) =>
-    node.addEventListener('click', () => {
-      const target = String(node.dataset.racePickerTarget || '');
-      if (racePaletteState.isOpen && racePaletteState.targetInputId === target) closeRacePalettePopover();
-      else openRacePalettePopover(target);
-      renderStatusPanel(ctx);
-    }),
-  );
-  content.querySelector('#bs-bt-race-derived')?.addEventListener('change', (event) => {
-    racePaletteState.selectedDerivedType = String(event.target?.value || '');
-    renderStatusPanel(ctx);
-  });
-  content.querySelector('#bs-bt-race-derived-subtype')?.addEventListener('input', (event) => {
-    racePaletteState.derivedSubtype = String(event.target?.value || '');
-  });
-  content.querySelector('#bs-bt-race-primary')?.addEventListener('change', (event) => {
-    racePaletteState.selectedRace = String(event.target?.value || '人类');
-    renderStatusPanel(ctx);
-  });
-  content.querySelector('#bs-bt-race-subtype')?.addEventListener('input', (event) => {
-    racePaletteState.subtype = String(event.target?.value || '');
-  });
-  content.querySelectorAll('[data-race-remove-index]').forEach((node) =>
-    node.addEventListener('click', () => {
-      const index = Number(node.getAttribute('data-race-remove-index'));
-      if (!Number.isInteger(index) || index < 0) return;
-      racePaletteState.raceTags = racePaletteState.raceTags.filter((_, entryIndex) => entryIndex !== index);
-      renderStatusPanel(ctx);
-    }),
-  );
-  content.querySelector('[data-race-action="append"]')?.addEventListener('click', () => {
-    const raceName = String(racePaletteState.selectedRace || '').trim();
-    const subtype = String(racePaletteState.subtype || '').trim();
-    const raceTag = raceName ? `${raceName}${subtype ? `-${subtype}` : ''}` : '';
-    if (!raceTag) {
-      globalThis.toastr?.warning?.('[BS BioTracker] 请先选择种族');
-      return;
-    }
-    racePaletteState.raceTags = [...racePaletteState.raceTags, raceTag];
-    racePaletteState.selectedRace = '人类';
-    racePaletteState.subtype = '';
-    renderStatusPanel(ctx);
-  });
-  content.querySelector('[data-race-action="cancel"]')?.addEventListener('click', () => {
-    closeRacePalettePopover();
-    renderStatusPanel(ctx);
-    refreshRegisterRacePalette();
-  });
-  content.querySelector('[data-race-action="confirm"]')?.addEventListener('click', () => {
-    const descriptor = buildRacePaletteDescriptor(racePaletteState);
-    if (!descriptor) {
-      globalThis.toastr?.warning?.('[BS BioTracker] 请先加入至少一个种族 tag');
-      return;
-    }
-    const target = document.getElementById(racePaletteState.targetInputId);
-    if (!target) return;
-    const current = String(target.value || '').trim();
-    target.value = isRegisterRaceTarget(racePaletteState.targetInputId) ? descriptor : (current ? `${current},${descriptor}` : descriptor);
-    if (racePaletteState.targetInputId === 'bs-bt-debug-race') {
-      debugInjectDraft.race = target.value;
-    }
-    closeRacePalettePopover();
-    renderStatusPanel(ctx);
-    refreshRegisterRacePalette();
   });
 }
 
@@ -5668,21 +4847,21 @@ function setView(view) {
   const root = document.getElementById(PANEL_ID);
   if (!root) return;
   const normalizedView = view === 'time-lapse' ? 'full-state' : view;
-  const next = ['home', 'theme', 'system', 'register', 'worldbook-filter', 'track-list', 'track-char', 'full-state', 'race-encyclopedia', 'tracker-preset', 'wardrobe', 'skill-catalog'].includes(normalizedView) ? normalizedView : 'home';
+  const next = ['home', 'theme', 'system', 'register', 'worldbook-filter', 'track-list', 'track-char', 'full-state', 'tracker-preset', 'wardrobe', 'skill-catalog'].includes(normalizedView) ? normalizedView : 'home';
   root.dataset.view = next;
   try {
     globalThis.localStorage?.setItem(LAST_VIEW_STORAGE_KEY, next);
   } catch {}
   document.querySelectorAll('#bs-biotracker-settings .bs-bt-view').forEach((node) => node.classList.toggle('is-active', node.dataset.view === next));
   const title = document.getElementById('bs-bt-title');
-  if (title) title.textContent = next === 'theme' ? 'THEME' : next === 'system' ? 'SYSTEM' : next === 'register' ? 'REGISTRY' : next === 'worldbook-filter' ? 'WORLDBOOK' : next === 'track-list' ? 'TRACK LIST' : next === 'track-char' ? 'TRACK CHAR' : next === 'full-state' ? 'FULL STATE' : next === 'race-encyclopedia' ? 'RACE DATA' : next === 'tracker-preset' ? 'PRESET' : next === 'wardrobe' ? 'WARDROBE' : next === 'skill-catalog' ? 'SKILLS' : 'HOME';
+  if (title) title.textContent = next === 'theme' ? 'THEME' : next === 'system' ? 'SYSTEM' : next === 'register' ? 'REGISTRY' : next === 'worldbook-filter' ? 'WORLDBOOK' : next === 'track-list' ? 'TRACK LIST' : next === 'track-char' ? 'TRACK CHAR' : next === 'full-state' ? 'FULL STATE' : next === 'tracker-preset' ? 'PRESET' : next === 'wardrobe' ? 'WARDROBE' : next === 'skill-catalog' ? 'SKILLS' : 'HOME';
 }
 
 function getLastPagerView() {
   try {
     const value = String(globalThis.localStorage?.getItem(LAST_VIEW_STORAGE_KEY) || '').trim();
     if (value === 'time-lapse') return 'full-state';
-    if (['home', 'theme', 'system', 'register', 'worldbook-filter', 'track-list', 'track-char', 'full-state', 'race-encyclopedia', 'tracker-preset', 'wardrobe', 'skill-catalog'].includes(value)) {
+    if (['home', 'theme', 'system', 'register', 'worldbook-filter', 'track-list', 'track-char', 'full-state', 'tracker-preset', 'wardrobe', 'skill-catalog'].includes(value)) {
       return value;
     }
   } catch {}
@@ -5704,7 +4883,6 @@ function updateApiEndpointPreview() {
 
 function applySettingsToForm(ctx) {
   const settings = getSettings(ctx);
-  syncRacePhysiologyOverrides(settings);
   const setValue = (id, value) => {
     const node = document.getElementById(id);
     if (!node) return;
@@ -5720,7 +4898,6 @@ function applySettingsToForm(ctx) {
   updateApiEndpointPreview();
   setValue('bs-bt-formatted-output-v4', settings.formattedOutputV4 !== false);
   setValue('bs-bt-mvu-extra-analysis-compat', settings.mvuExtraAnalysisCompat !== false);
-  setValue('bs-bt-race-catalog', settings.raceCatalogInPrompt !== false);
   setValue('bs-bt-trigger', settings.triggerTiming);
   setValue('bs-bt-poll-ms', settings.pollMs);
   setValue('bs-bt-api-timeout-sec', Math.round((Number(settings.apiTimeoutMs) || 0) / 1000));
@@ -5751,8 +4928,6 @@ function applySettingsToForm(ctx) {
   renderStatusPanel(ctx);
   renderFullStatePage(ctx);
   renderSkillCatalogPage(ctx);
-  renderRaceEncyclopediaPage(ctx);
-  refreshRegisterRacePalette();
   renderRegisterChildSourceOptions(ctx);
   syncTrackerPresetSelectionUi(ctx);
   setView(getLastPagerView());
@@ -6260,7 +5435,6 @@ async function clearCurrentGlobalWorldbookSelections(ctx) {
 
 function updateMainFlowPrompt(ctx) {
   const settings = getSettings(ctx);
-  syncRacePhysiologyOverrides(settings);
   const prompt = buildMainFlowPrompt(ctx, settings);
   globalThis[MAINFLOW_PROMPT_TOKEN_INPUT_KEY] = { capturedAt: Date.now(), prompt };
   try {
@@ -6288,8 +5462,6 @@ function readSettingsFromForm(ctx) {
   if (formattedOutputToggle) settings.formattedOutputV4 = Boolean(formattedOutputToggle.checked);
   const mvuCompatToggle = document.getElementById('bs-bt-mvu-extra-analysis-compat');
   if (mvuCompatToggle) settings.mvuExtraAnalysisCompat = Boolean(mvuCompatToggle.checked);
-  const raceCatalogToggle = document.getElementById('bs-bt-race-catalog');
-  if (raceCatalogToggle) settings.raceCatalogInPrompt = Boolean(raceCatalogToggle.checked);
   settings.triggerTiming = String(getValue('bs-bt-trigger')).trim() || 'after_ai';
   settings.pollMs = Math.max(800, Number(getValue('bs-bt-poll-ms')) || 1800);
   const rawApiTimeoutSec = String(getValue('bs-bt-api-timeout-sec')).trim();
@@ -6321,7 +5493,6 @@ function readSettingsFromForm(ctx) {
     normalDescription: String(getValue('bs-bt-registry-normal-description')).trim(),
     pregnantDescription: String(getValue('bs-bt-registry-pregnant-description')).trim(),
   };
-  syncRacePhysiologyOverrides(settings);
   saveSettings(ctx);
   updateMainFlowPrompt(ctx);
   resetPoller(ctx, trackerDeps);
@@ -6671,7 +5842,6 @@ async function ensureModal(ctx) {
         openFullStateMenu(ctx);
         return;
       }
-      if (nextView === 'race-encyclopedia') renderRaceEncyclopediaPage(ctx);
       if (nextView === 'wardrobe') renderWardrobePage(ctx);
       if (nextView === 'skill-catalog') renderSkillCatalogPage(ctx);
       if (nextView === 'register') renderRegisterChildSourceOptions(ctx);
@@ -6966,11 +6136,6 @@ async function ensureModal(ctx) {
       console.error('[BS BioTracker] refreshTrackerPresetPage failed', error);
     });
   });
-  document.getElementById('bs-bt-race-select')?.addEventListener('change', (event) => {
-    selectedRaceEncyclopedia = String(event.target?.value || '');
-    racePhysiologyEditorOpen = false;
-    renderRaceEncyclopediaPage(ctx);
-  });
   document.getElementById('bs-bt-tracker-worldbook-mode')?.addEventListener('change', async () => {
     readSettingsFromForm(ctx);
     syncWorldbookFilterInput(ctx);
@@ -7010,55 +6175,6 @@ async function ensureModal(ctx) {
   document.getElementById('bs-bt-global-worldbook-entry-search')?.addEventListener('input', (event) => {
     globalWorldbookEntrySearch = String(event.target?.value || '').trim();
     renderWorldbookEntryList(ctx, latestGlobalWorldbookEntries, { scope: 'global' });
-  });
-  document.getElementById('bs-bt-derived-select')?.addEventListener('change', (event) => {
-    selectedDerivedEncyclopedia = String(event.target?.value || '');
-    derivedTypeEditorOpen = false;
-    renderRaceEncyclopediaPage(ctx);
-  });
-  document.getElementById('bs-bt-derived-open-editor')?.addEventListener('click', () => {
-    if (!selectedDerivedEncyclopedia) return;
-    setEncyclopediaSubpage('derived');
-    scrollEncyclopediaToTop();
-    derivedTypeEditorOpen = true;
-    renderRaceEncyclopediaPage(ctx);
-  });
-  document.getElementById('bs-bt-derived-editor-close')?.addEventListener('click', closeDerivedTypeEditor);
-  document.getElementById('bs-bt-derived-editor-modal')?.addEventListener('click', (event) => {
-    if (event.target === event.currentTarget) closeDerivedTypeEditor();
-  });
-  document.getElementById('bs-bt-derived-save-override')?.addEventListener('click', () => {
-    const name = selectedDerivedEncyclopedia;
-    saveDerivedTypeOverrideFromEditor(ctx);
-    globalThis.toastr?.success?.(`[BS BioTracker] 已保存 ${name} 的衍生参数覆盖`);
-  });
-  document.getElementById('bs-bt-derived-reset-override')?.addEventListener('click', () => {
-    const name = selectedDerivedEncyclopedia;
-    resetDerivedTypeOverride(ctx);
-    globalThis.toastr?.success?.(`[BS BioTracker] 已恢复 ${name} 的内置衍生参数`);
-  });
-  document.getElementById('bs-bt-race-open-editor')?.addEventListener('click', () => {
-    setEncyclopediaSubpage('race');
-    openRacePhysiologyEditor(ctx);
-  });
-  document.getElementById('bs-bt-race-editor-close')?.addEventListener('click', () => {
-    closeRacePhysiologyEditor();
-  });
-  document.getElementById('bs-bt-race-editor-modal')?.addEventListener('click', (event) => {
-    if (event.target === event.currentTarget) closeRacePhysiologyEditor();
-  });
-  document.getElementById('bs-bt-race-use-human')?.addEventListener('click', () => {
-    copyHumanPhysiologyToEditor();
-    const status = document.getElementById('bs-bt-race-editor-status');
-    if (status) status.textContent = '已填入人类数值，点击“保存覆盖”后生效。';
-  });
-  document.getElementById('bs-bt-race-save-override')?.addEventListener('click', () => {
-    saveRacePhysiologyOverrideFromEditor(ctx, 'diff');
-    globalThis.toastr?.success?.(`[BS BioTracker] 已保存 ${selectedRaceEncyclopedia} 的种族参数覆盖`);
-  });
-  document.getElementById('bs-bt-race-reset-override')?.addEventListener('click', () => {
-    resetRacePhysiologyOverride(ctx);
-    globalThis.toastr?.success?.(`[BS BioTracker] 已恢复 ${selectedRaceEncyclopedia} 的内置种族参数`);
   });
   document.getElementById('bs-bt-connect')?.addEventListener('click', async () => {
     readSettingsFromForm(ctx);
@@ -7197,14 +6313,6 @@ async function ensureModal(ctx) {
     setBreedingInferenceTarget('');
     setBreedingInferenceStatus('角色名已变更，先前的繁育推演结果已清除。');
   });
-  document.querySelectorAll('#bs-bt-encyclopedia-tabs [data-encyclopedia-tab]').forEach((node) => {
-    node.addEventListener('click', () => {
-      closeRacePhysiologyEditor();
-      closeDerivedTypeEditor();
-      setEncyclopediaSubpage(String(node.dataset.encyclopediaTab || 'race'));
-      scrollEncyclopediaToTop();
-    });
-  });
   document.getElementById('bs-bt-wardrobe-prep-run')?.addEventListener('click', () => runWardrobePrepInference(ctx));
   document.getElementById('bs-bt-wardrobe-prep-apply')?.addEventListener('click', () => applyWardrobePrep(ctx));
   document.getElementById('bs-bt-diary-generate')?.addEventListener('click', () => generateRegistryDiary(ctx));
@@ -7269,7 +6377,7 @@ async function ensureModal(ctx) {
       return;
     }
     if (!breedingInference) {
-      setBreedingInferenceStatus('没有可套用的繁育推演，或当前角色名／种族／额外推演提示已和推演时不同。', true);
+      setBreedingInferenceStatus('没有可套用的繁育推演，或当前角色名／补充设定／额外推演提示已和推演时不同。', true);
       globalThis.toastr?.warning?.('[BS BioTracker] 请先为当前输入执行繁育推演');
       return;
     }
@@ -7314,7 +6422,7 @@ async function ensureModal(ctx) {
       globalThis.toastr?.info?.('[BS BioTracker] 注册请求正在进行中，请等待完成');
       return;
     }
-    const { targetName, declaredRace, customNotes, sourceChild, specialFetus } = getRegisterFormValues();
+    const { targetName, customNotes, sourceChild, specialFetus } = getRegisterFormValues();
     if (specialFetus?.error) {
       setRegisterStatus(specialFetus.error, true);
       globalThis.toastr?.warning?.(specialFetus.error, '[BS BioTracker]');
@@ -7330,7 +6438,7 @@ async function ensureModal(ctx) {
     let breedingInference = null;
     try {
       const breedingInferencePrompt = String(document.getElementById('bs-bt-breeding-inference-prompt')?.value || '').trim();
-      breedingInference = getApplicableBreedingInferenceDraft({ targetName, declaredRace, customNotes, breedingInferencePrompt });
+      breedingInference = getApplicableBreedingInferenceDraft({ targetName, customNotes, breedingInferencePrompt });
     } catch (error) {
       const message = String(error?.message || error);
       setRegisterStatus(message, true);
@@ -7341,7 +6449,7 @@ async function ensureModal(ctx) {
       ? `正在使用繁育推演注册 ${targetName}...`
       : `正在注册 ${targetName}...`);
     try {
-      const character = await runRegistry(ctx, { targetName, customNotes, declaredRace, breedingInference, sourceChild, specialFetus: specialFetusRequest });
+      const character = await runRegistry(ctx, { targetName, customNotes, breedingInference, sourceChild, specialFetus: specialFetusRequest });
       renderStatusPanel(ctx);
       renderFullStatePage(ctx);
       renderSkillCatalogPage(ctx);
@@ -7366,73 +6474,6 @@ async function ensureModal(ctx) {
     } finally {
       endRegistryOperation('register');
     }
-  });
-  document.querySelector('#bs-bt-view-register .bs-bt-race-picker-wrap')?.addEventListener('click', (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const pickerButton = target.closest('[data-race-picker-target]');
-    if (pickerButton) {
-      const inputId = String(pickerButton.getAttribute('data-race-picker-target') || '');
-      if (racePaletteState.isOpen && racePaletteState.targetInputId === inputId) closeRacePalettePopover();
-      else openRacePalettePopover(inputId);
-      refreshRegisterRacePalette();
-      return;
-    }
-    const removeButton = target.closest('[data-race-remove-index]');
-    if (removeButton && isRegisterRaceTarget(racePaletteState.targetInputId)) {
-      const index = Number(removeButton.getAttribute('data-race-remove-index'));
-      if (Number.isInteger(index) && index >= 0) {
-        racePaletteState.raceTags = racePaletteState.raceTags.filter((_, entryIndex) => entryIndex !== index);
-        refreshRegisterRacePalette();
-      }
-      return;
-    }
-    const actionButton = target.closest('[data-race-action]');
-    if (!actionButton || !isRegisterRaceTarget(racePaletteState.targetInputId)) return;
-    const action = String(actionButton.getAttribute('data-race-action') || '');
-    if (action === 'append') {
-      const raceName = String(racePaletteState.selectedRace || '').trim();
-      const subtype = String(racePaletteState.subtype || '').trim();
-      const raceTag = raceName ? `${raceName}${subtype ? `-${subtype}` : ''}` : '';
-      if (!raceTag) {
-        globalThis.toastr?.warning?.('[BS BioTracker] 请先选择种族');
-        return;
-      }
-      racePaletteState.raceTags = [...racePaletteState.raceTags, raceTag];
-      racePaletteState.selectedRace = '人类';
-      racePaletteState.subtype = '';
-      refreshRegisterRacePalette();
-      return;
-    }
-    if (action === 'cancel') {
-      closeRacePalettePopover();
-      refreshRegisterRacePalette();
-      return;
-    }
-    if (action === 'confirm') {
-      const descriptor = buildRacePaletteDescriptor(racePaletteState);
-      if (!descriptor) {
-        globalThis.toastr?.warning?.('[BS BioTracker] 请先加入至少一个种族 tag');
-        return;
-      }
-      const input = document.getElementById('bs-bt-register-race');
-      if (input) input.value = descriptor;
-      closeRacePalettePopover();
-      refreshRegisterRacePalette();
-    }
-  });
-  document.querySelector('#bs-bt-view-register .bs-bt-race-picker-wrap')?.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || !isRegisterRaceTarget(racePaletteState.targetInputId)) return;
-    if (target.id === 'bs-bt-race-derived') racePaletteState.selectedDerivedType = String(target.value || '');
-    if (target.id === 'bs-bt-race-primary') racePaletteState.selectedRace = String(target.value || '人类');
-    refreshRegisterRacePalette();
-  });
-  document.querySelector('#bs-bt-view-register .bs-bt-race-picker-wrap')?.addEventListener('input', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || !isRegisterRaceTarget(racePaletteState.targetInputId)) return;
-    if (target.id === 'bs-bt-race-derived-subtype') racePaletteState.derivedSubtype = String(target.value || '');
-    if (target.id === 'bs-bt-race-subtype') racePaletteState.subtype = String(target.value || '');
   });
   document.getElementById('bs-bt-run')?.addEventListener('click', async (event) => {
     const button = event.currentTarget;
@@ -7520,7 +6561,7 @@ async function ensureModal(ctx) {
       return;
     }
     const confirmed = globalThis.confirm?.(
-      `[BS BioTracker] 确定清空全部 ${chatCount} 个聊天的追踪状态吗？\n\n角色状态、快照、日记与累计时间都会删除，且无法复原。设置与种族参数不会被清除。`,
+      `[BS BioTracker] 确定清空全部 ${chatCount} 个聊天的追踪状态吗？\n\n角色状态、快照、日记与累计时间都会删除，且无法复原。设置不会被清除。`,
     );
     if (!confirmed) return;
     settings.chatStates = {};

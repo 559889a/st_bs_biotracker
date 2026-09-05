@@ -55,10 +55,6 @@
                 <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--json" aria-hidden="true"></span>
                 <span class="bs-bt-home-tile__label">变量</span>
               </button>
-              <button class="bs-bt-home-tile" type="button" data-nav-view="race-encyclopedia">
-                <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--dna" aria-hidden="true"></span>
-                <span class="bs-bt-home-tile__label">百科</span>
-              </button>
               <button class="bs-bt-home-tile" type="button" data-nav-view="theme">
                 <span class="bs-bt-home-tile__icon bs-bt-home-tile__icon--theme" aria-hidden="true"></span>
                 <span class="bs-bt-home-tile__label">主题</span>
@@ -232,14 +228,6 @@
 
             <div class="settings_section">
               <div class="bs-bt-setting-toggle-row">
-                <input id="bs-bt-race-catalog" type="checkbox" />
-                <label for="bs-bt-race-catalog">提示词附带种族名录</label>
-              </div>
-              <small>让模型知道系统内建了哪些种族，避免注册与 bsAddSperm 时凭空自创种族名（自创名称查不到生理参数）。追踪请求约多 350 token，注册请求约多 1000 token。纯现代写实剧本可关闭。</small>
-            </div>
-
-            <div class="settings_section">
-              <div class="bs-bt-setting-toggle-row">
                 <input id="bs-bt-mvu-extra-analysis-compat" type="checkbox" />
                 <label for="bs-bt-mvu-extra-analysis-compat">MVU 额外模型解析兼容(等待变量更新完成后再追踪)</label>
               </div>
@@ -336,19 +324,6 @@
             <div class="settings_section">
               <label for="bs-bt-register-name">注册角色名</label>
               <input id="bs-bt-register-name" class="text_pole" type="text" placeholder="露比" />
-            </div>
-
-            <div class="settings_section">
-              <label for="bs-bt-register-race">注册种族</label>
-              <div class="bs-bt-race-picker-wrap">
-                <div class="bs-bt-race-input-row">
-                  <input id="bs-bt-register-race" class="text_pole" type="text" value="人类"
-                    placeholder="人类 / 混血 / 衍生 / 子项" />
-                  <button type="button" class="bs-bt-race-picker-button" data-race-picker-target="bs-bt-register-race"
-                    title="种族调色盘" aria-label="种族调色盘">☥</button>
-                </div>
-                <div id="bs-bt-register-race-palette-anchor"></div>
-              </div>
             </div>
 
             <div class="settings_section">
@@ -798,86 +773,6 @@
           </div>
         </section>
 
-        <section id="bs-bt-view-race-encyclopedia" class="bs-bt-view" data-view="race-encyclopedia">
-          <div class="bs-bt-panel">
-            <div class="settings_section">
-              <div id="bs-bt-race-count" class="bs-bt-status-title">内置种族数量：0</div>
-            </div>
-
-            <div class="settings_section">
-              <div class="bs-bt-track-tabs" id="bs-bt-encyclopedia-tabs">
-                <button type="button" class="bs-bt-track-tab is-active" data-encyclopedia-tab="race">一般类型</button>
-                <button type="button" class="bs-bt-track-tab" data-encyclopedia-tab="derived">衍生类型</button>
-              </div>
-            </div>
-
-            <div class="bs-bt-encyclopedia-page is-active" data-encyclopedia-page="race">
-
-            <div class="settings_section">
-              <label for="bs-bt-race-select">选择种族</label>
-              <select id="bs-bt-race-select" class="text_pole">
-                <option value="">请选择种族</option>
-              </select>
-            </div>
-
-            <div class="settings_section">
-              <button id="bs-bt-race-open-editor" class="menu_button" type="button">调整参数</button>
-              <div id="bs-bt-race-editor-modal" class="bs-bt-race-editor-modal" hidden>
-                <div class="bs-bt-race-editor-dialog">
-                  <div class="bs-bt-race-editor-head">
-                    <div id="bs-bt-race-editor-title" class="bs-bt-status-title">种族参数覆盖</div>
-                    <button id="bs-bt-race-editor-close" class="bs-bt-race-close-button" type="button" aria-label="关闭参数覆盖">×</button>
-                  </div>
-                  <div id="bs-bt-race-editor" class="bs-bt-race-editor"></div>
-                  <div class="settings_section bs-bt-action-row">
-                    <button id="bs-bt-race-use-human" class="menu_button" type="button">套用人类值</button>
-                    <button id="bs-bt-race-save-override" class="menu_button" type="button">保存覆盖</button>
-                    <button id="bs-bt-race-reset-override" class="menu_button" type="button">恢复内置</button>
-                  </div>
-                  <div id="bs-bt-race-editor-status" class="bs-bt-inline-status">物种短敘述可留空；数值只保存与内置值不同的字段；产后恢复天数由系统公式与指令流程处理。</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings_section">
-              <div class="bs-bt-status-title">种族资料</div>
-              <pre id="bs-bt-race-output" class="bs-bt-status-box">请选择种族查看资料。</pre>
-            </div>
-            </div>
-
-            <div class="bs-bt-encyclopedia-page" data-encyclopedia-page="derived" hidden>
-            <div class="settings_section">
-              <label for="bs-bt-derived-select">选择衍生</label>
-              <select id="bs-bt-derived-select" class="text_pole">
-                <option value="">请选择衍生</option>
-              </select>
-            </div>
-
-            <div class="settings_section">
-              <button id="bs-bt-derived-open-editor" class="menu_button" type="button">调整参数</button>
-              <div id="bs-bt-derived-editor-modal" class="bs-bt-race-editor-modal" hidden>
-                <div class="bs-bt-race-editor-dialog">
-                  <div class="bs-bt-race-editor-head">
-                    <div id="bs-bt-derived-editor-title" class="bs-bt-status-title">衍生参数覆盖</div>
-                    <button id="bs-bt-derived-editor-close" class="bs-bt-race-close-button" type="button" aria-label="关闭衍生参数覆盖">×</button>
-                  </div>
-                  <div id="bs-bt-derived-editor" class="bs-bt-race-editor"></div>
-                  <div class="settings_section bs-bt-action-row">
-                    <button id="bs-bt-derived-save-override" class="menu_button" type="button">保存覆盖</button>
-                    <button id="bs-bt-derived-reset-override" class="menu_button" type="button">恢复内置</button>
-                  </div>
-                  <div id="bs-bt-derived-editor-status" class="bs-bt-inline-status">只保存与内置值不同的字段；代谢抵免维持内置规则，子项会继承所属衍生大类。</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="settings_section">
-              <div class="bs-bt-status-title">衍生资料</div>
-              <pre id="bs-bt-derived-output" class="bs-bt-status-box">请选择衍生查看 Flux 资料。</pre>
-            </div>
-            </div>
-          </div>
-        </section>
       </div>
 
       <div id="bs-bt-power-off-screen" class="bs-bt-power-off-overlay">

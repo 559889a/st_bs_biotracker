@@ -453,6 +453,50 @@ export function deriveMenstrualStageState() {
   return { stage, days };
 }
 
+/**
+ * 年龄→经期判定。
+ *
+ * 约定：
+ * - age < bio.menarcheAge（初潮）：未进入生育期，月经阶段一律强制为无经期（cause: premenopause 之前）。
+ * - age >= bio.menopauseAge（停经）：生育期结束，月经阶段一律强制为停经（永久阶段）。
+ * - 两者之间（含围绝经期）：周期照常，围绝经期的衰退由 tools.js 的阶段链负责。
+ * menarche/menopause 种子可在注册时烤入 ±抖动；旧存档缺失时用默认值（12 / 45）。
+ */
+export const MENARCHE_DEFAULT_AGE = 12;
+export const MENOPAUSE_DEFAULT_AGE = 45;
+
+export function getMenarcheAge(profile = {}) {
+  const value = Number(profile?.bio?.menarcheAge);
+  return Number.isFinite(value) && value > 0 ? value : MENARCHE_DEFAULT_AGE;
+}
+
+export function getMenopauseAge(profile = {}) {
+  const value = Number(profile?.bio?.menopauseAge);
+  return Number.isFinite(value) && value > 0 ? value : MENOPAUSE_DEFAULT_AGE;
+}
+
+/** 初潮前判定：仅年龄说话，与阶段无关。 */
+export function isPreMenarche(profile = {}) {
+  const age = Number(profile?.base?.age);
+  return Number.isFinite(age) && age >= 0 && age < getMenarcheAge(profile);
+}
+
+/** 停经判定：年龄到了就是，不管当前阶段（围绝经期晚期到点即转）。 */
+export function isPostMenopause(profile = {}) {
+  const age = Number(profile?.base?.age);
+  return Number.isFinite(age) && age >= 0 && age >= getMenopauseAge(profile);
+}
+
+/** 年龄段的月经阶段校正：返回 null（照常）或应强制进入的阶段。 */
+function resolveAgeMenstrualOverride(profile = {}, currentStage = '') {
+  const isMenstrualStage = MENSTRUAL_STAGES.includes(currentStage);
+  // 妊娠/产程/哺乳/回归等真实状态与年龄判定无关，只在「周期」上覆盖
+  if (!isMenstrualStage && currentStage !== '无经期') return null;
+  if (isPreMenarche(profile)) return '无经期';
+  if (isPostMenopause(profile)) return '停经';
+  return null;
+}
+
 export function derivePregnancyStageState(pregnantDays, gestationSpeed = 1) {
   const actualPregnantDays = Math.max(0, Number(pregnantDays) || 0);
   const speed = Math.max(0.1, Number(gestationSpeed) || 1);
@@ -546,11 +590,18 @@ export function syncCharacterStageFromProfile(characterState) {
     return next;
   }
 
+  // 年龄→经期强制：初潮前的月经/无经期 → 无经期；到停经年龄 → 停经。
+  // 只覆盖「周期」类阶段——正在妊娠/哺乳/回归的角色不受影响。
+  const ageOverride = resolveAgeMenstrualOverride(profile, currentStage);
+
   if (
     MENSTRUAL_STAGES.includes(currentStage)
     || currentStage === '假孕期'
     || currentStage === '产兆前驱'
     || currentStage === '产后恢复'
+    || currentStage === '哺乳期'
+    || currentStage === '围绝经期晚期'
+    || currentStage === '停经'
     || LABOR_STAGES.includes(currentStage)
     || currentStage === '无经期'
     || currentStage === '未激活'
@@ -560,8 +611,19 @@ export function syncCharacterStageFromProfile(characterState) {
   ) {
     next.profile.base = {
       ...base,
+      ...(ageOverride ? { stage: ageOverride, days: 0 } : {}),
       days: Math.max(0, Number(base.days) || 0),
     };
+    return next;
+  }
+
+  // 未识别阶段的重设也要过年龄闸门：随机月经阶段对初潮前/停经角色没有意义
+  if (isPreMenarche(profile)) {
+    next.profile.base = { ...base, stage: '无经期', days: 0 };
+    return next;
+  }
+  if (isPostMenopause(profile)) {
+    next.profile.base = { ...base, stage: '停经', days: 0 };
     return next;
   }
 
@@ -750,6 +812,9 @@ export function createDefaultFemaleState(name = '') {
         orgasmOvulationAmount: 1,
         identicalProbability: 5,
         recoveryDays: 56,
+        lactationDays: 45,
+        menarcheAge: 12,
+        menopauseAge: 45,
       },
       metabolism: {
         excretion: 0,
@@ -1577,6 +1642,9 @@ function createSnapshotCharacterBaseline(name = '') {
         orgasmOvulationAmount: 1,
         identicalProbability: 5,
         recoveryDays: 56,
+        lactationDays: 45,
+        menarcheAge: 12,
+        menopauseAge: 45,
       },
       metabolism: {
         excretion: 0,

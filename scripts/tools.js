@@ -8,6 +8,8 @@ import {
   getGestationSpeciesSpeed,
   getGestationModifierMultiplier,
   getChatState,
+  getMenarcheAge,
+  getMenopauseAge,
   getPsyStressInitByLevel,
   getSettings,
   getVitalityInitByLevel,
@@ -41,21 +43,12 @@ import {
   LABOR_STAGE_BASE_HOURS,
   LABOR_STAGE_INCREMENT,
   LABOR_POSTPARTUM_OBSERVATION_HOURS,
+  LACTATION_DEFAULT_DAYS,
   MENSTRUAL_STAGE_DAYS,
   MENSTRUAL_STAGES,
   PREGNANCY_STAGE_DAYS,
   PREGNANCY_STAGES,
 } from './stage_config.js';
-import {
-  getBaseRaceName,
-  getDerivedTypeInheritanceProfile,
-  getDerivedTypeMetabolismExemptions,
-  getEmbryoTypeByRace,
-  getMergedRacePhysiologyProfile,
-  parseRaceDescriptor,
-  getRaceDescriptorComponents,
-  getRaceComponents as getConfiguredRaceComponents,
-} from './race_config.js';
 import {
   addSkillExperience,
   addTalentExperience,
@@ -70,7 +63,7 @@ import {
 export const TOOL_DEFINITIONS = Object.freeze([
   {
     name: 'bsPassedTime',
-    description: '推进当前聊天中所有已注册角色的时间（不是单一角色）。会处理月经阶段、受精着床、孕期推进、产兆前驱、第一至第三产程、产后恢复，以及最近性行为计时。'
+    description: '推进当前聊天中所有已注册角色的时间（不是单一角色）。会处理月经阶段、受精着床、孕期推进、产兆前驱、第一至第三产程、产后恢复、哺乳期，以及最近性行为计时。'
       + '各单位可同时给，会相加（如 day:1 与 hour:12 等于 1.5 天）。只能往前推：不给任何单位、或给负数都会被拒绝，时间无法倒退。',
     input_schema: {
       type: 'object',
@@ -351,16 +344,15 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsAddSperm',
-    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数，建议 10-30（残留每天自动衰减 10，即 1-3 天内自然消失）；给过大的值会让正文连续多日描写残留。扣除/排出精液请用 bsDrainSperm。race 使用 [derivedType-装饰子项]race-装饰子项 格式，混血种族以 X 分隔；父系 derivedType 直接从这个字符串解析。',
+    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数，建议 10-30（残留每天自动衰减 10，即 1-3 天内自然消失）；给过大的值会让正文连续多日描写残留。扣除/排出精液请用 bsDrainSperm。',
     input_schema: {
       type: 'object',
       properties: {
         female: { type: 'string' },
         male: { type: 'string' },
-        race: { type: 'string' },
         amount: { type: 'number' },
       },
-      required: ['female', 'male', 'race', 'amount'],
+      required: ['female', 'male', 'amount'],
       additionalProperties: false,
     },
   },
@@ -380,8 +372,9 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     name: 'bsSetMenstrualPhases',
     description: '直接设置月经相关阶段，用于催情、药物、外力或剧情推进。'
-      + 'stage 只接受这几个值：卵泡期、排卵期、黄体期、月经期、产后恢复、假孕期；其他值（含妊娠阶段与回归期）一律拒绝，无法用本工具让角色怀孕或结束妊娠。'
-      + '切到排卵期时会重新允许高潮排卵；假孕期可留精但不会排卵或受孕。'
+      + 'stage 只接受这几个值：卵泡期、排卵期、黄体期、月经期、产后恢复、假孕期、哺乳期；其他值（含妊娠阶段、回归期、围绝经期晚期与停经）一律拒绝。'
+      + '停经与围绝经期晚期是年龄决定的永久阶段，无法用本工具切出——若剧情需要重启周期（激素治疗等），请由用户在完整变量页调整 bio.menopauseAge。'
+      + '切到排卵期时会重新允许高潮排卵；假孕期与哺乳期可留精但不会排卵或受孕（哺乳期闭经）；从哺乳期切走视为强制断奶。'
       + '角色体内已有胎儿或受精进行中，或正处于真妊娠、回归期、产兆前驱、产程时，本工具会被拒绝，不会覆盖这些状态。',
     input_schema: {
       type: 'object',
@@ -395,7 +388,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsExcreteMetabolism',
-    description: '缓解角色的生理需求。普通种族用于处理泄意、饿意、困意、乳意、臭意与伴意；其中 excretion（泄意）同时包含排尿与排便需求。乳意在普通周期表示乳房胀敏，在妊娠、假孕或产后恢复则可表示乳胀与泌乳需求；性欲波动会自然产生乳意，不由伴意解除额外转化。进食缓解 hunger 会增加 excretion 与少量 sleep，睡眠缓解 sleep 会增加少量 hunger，高 odor 会降低 companionship 的社交缓解效果。带 derivedType 的角色以 flux 进行极性解放，并处理未抵免需求；要解放 flux 时请传 flux，或不传 options 使用默认释放量。pregnant.blockage 会降低排解效果，pregnant.acceleration 会加快累积并让刚缓解的对应需求较快回升，pregnant.expansion 会使对应需求容量由 150 扩为 200。',
+    description: '缓解角色的生理需求：泄意、饿意、困意、乳意、臭意与伴意；其中 excretion（泄意）同时包含排尿与排便需求。乳意在普通周期表示乳房胀敏，在妊娠、假孕、产后恢复或哺乳期则可表示乳胀与泌乳需求；哺乳期缓解乳意 ≥10 视为一次有效哺乳/排乳——规律哺乳会持续维持泌乳（哺乳期不会结束），连续 bio.lactationDays 天（默认45）不哺乳身体才会退奶。性欲波动会自然产生乳意，不由伴意解除额外转化。进食缓解 hunger 会增加 excretion 与少量 sleep，睡眠缓解 sleep 会增加少量 hunger，高 odor 会降低 companionship 的社交缓解效果。不传 options 时使用默认释放量。pregnant.blockage 会降低排解效果，pregnant.acceleration 会加快累积并让刚缓解的对应需求较快回升，pregnant.expansion 会使对应需求容量由 150 扩为 200。',
     input_schema: {
       type: 'object',
       properties: {
@@ -409,7 +402,6 @@ export const TOOL_DEFINITIONS = Object.freeze([
             milk: { type: 'number', minimum: 0, maximum: 200 },
             odor: { type: 'number', minimum: 0, maximum: 200 },
             companionship: { type: 'number', minimum: 0, maximum: 200 },
-            flux: { type: 'number', minimum: 0, maximum: 400 },
           },
           additionalProperties: false,
         },
@@ -437,11 +429,8 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsImplantEmbryo',
-    description: '把外源胚胎植入角色体内：代孕、胚胎移植、虫母注卵、寄生产卵等，凡是「孕育者不是遗传母亲」的情节都用这个。'
-      + 'provider 是胚胎真正的归属方（提供卵子的一方／虫母／委托母亲），分娩后孩子会转交给她；若她尚未注册，孩子会留在承载者名下并标注来源。'
-      + '胚胎种族依遗传母方推导而非承载者，所以虫母的卵放进人类宿主仍是虫族血统。'
-      + 'race 与 fatherRace 使用 [derivedType-装饰子项]race-装饰子项 格式，混血种族以 X 分隔。母系 derivedType 永远来自承载者；父系优先取 fatherRace，未写时才取 race。'
-      + 'provider 若尚未注册，用 race 指明遗传母方种族；父方种族预设与遗传母方同族，跨种族时用 fatherRace 指明。'
+    description: '把外源胚胎植入角色体内：代孕、胚胎移植等，凡是「孕育者不是遗传母亲」的情节都用这个。'
+      + 'provider 是胚胎真正的归属方（提供卵子的一方／委托母亲），分娩后孩子会转交给她；若她尚未注册，孩子会留在承载者名下并标注来源。'
       + '工具加入的是尚未着床的受精卵，可在同一着床窗口重复调用；第一颗会启动共用 fertilizationDays，之后由 bsPassedTime 推进并统一着床。已进入妊娠阶段后不可再加入。自然受孕请勿使用本工具。',
     input_schema: {
       type: 'object',
@@ -450,8 +439,6 @@ export const TOOL_DEFINITIONS = Object.freeze([
         provider: { type: 'string' },
         fathers: { type: 'string' },
         count: { type: 'integer', minimum: 1, maximum: 50 },
-        race: { type: 'string' },
-        fatherRace: { type: 'string' },
       },
       required: ['female', 'provider'],
       additionalProperties: false,
@@ -461,8 +448,6 @@ export const TOOL_DEFINITIONS = Object.freeze([
     name: 'bsWombReturn',
     description: '胎内回归：让 returner 这个人回到 female 的子宫内成为其胎儿，经过一段过渡后转为正常妊娠，出生时是全新个体（新的孩子记录，与原来那个人不是同一笔资料）。'
       + 'returner 可以是任何人：user、未注册的路人、或已注册角色都行，不必事先注册。'
-      + '未注册的 returner 请一并给 returnerRace 说明其种族；已注册角色可省略，系统会读她自己的种族。'
-      + 'returnerRace 使用 [derivedType-装饰子项]race-装饰子项 格式，混血以 X 分隔；两者都缺时视同与承载者同族。'
       + '\n呼叫条件：承载者必须处于月经阶段（卵泡期/排卵期/黄体期/月经期）或无经期；她自己正在别人体内、或已在回归期时不可呼叫。'
       + 'returner 若是已注册角色且已经在别人体内，也不可再次回归。不能让角色回归自己的子宫。'
       + '呼叫时承载者子宫内已有的胎儿、残留精液与卵子会被直接净空。'
@@ -470,7 +455,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
       + '两者在 hours 小时内线性回落到正常，随后自动转入孕早期第一天，之后按一般妊娠推进。'
       + 'hours 是故事内经过的时间，必须是不小于 0 的数字，要靠 bsPassedTime 推进才会流逝；'
       + '传 0 表示瞬间完成（角色对这段过程无知觉），会当场结算进孕早期。回归期中不能植入其他胚胎。'
-      + '\n该胎的母方为承载者、父方为 returner，种族照常混血，并带 rebirth 标签。'
+      + '\n该胎的母方为承载者、父方为 returner，并带 rebirth 标签。'
       + 'returner 若是已注册角色，她的天赋会传给这一胎（技能不传），并且会被冻结：设为离场且停止一切阶段推进（她现在是一颗胎儿），'
       + '期间对她使用生理类工具一律无效；用 bsSetCharacterPresence 将她设回在场即可解除冻结。未注册的 returner 没有冻结这回事。'
       + '\n回归期不受子宫压力影响，不会因宫压过高而自然流产；只有明确呼叫 bsAbortion 才会中断。'
@@ -481,7 +466,6 @@ export const TOOL_DEFINITIONS = Object.freeze([
       properties: {
         female: { type: 'string' },
         returner: { type: 'string' },
-        returnerRace: { type: 'string' },
         hours: { type: 'number' },
       },
       required: ['female', 'returner'],
@@ -699,7 +683,8 @@ const WOMB_RETURN_PEAK_WEIGHT = 3.0;
 
 /** 承载者允许被回归的阶段：子宫得是空的（有东西会被净空），且不能正在妊娠或生产 */
 function canAcceptWombReturn(stage) {
-  return MENSTRUAL_STAGES.includes(stage) || stage === '无经期';
+  // 停经后子宫仍然存在（承接回归不要求有月经）；围绝经期晚期尚有稀发周期，同属可承载
+  return MENSTRUAL_STAGES.includes(stage) || stage === '无经期' || stage === '围绝经期晚期' || stage === '停经';
 }
 
 /** 这个角色现在是别人肚子里的一颗胎儿 */
@@ -860,18 +845,8 @@ function applyWombReturn(chatState, args) {
   pregnant.fetalEnergyDrain = 0;
 
   const returnerProfile = returner?.profile || {};
-  const returnerBase = returnerProfile.base || {};
-  const motherRace = parseRaceDescriptor(base.race || '人类').race || '人类';
-  // 种族来源依序：显式传入 > 已注册角色自己的种族 > 与承载者同族
-  const explicitRace = String(args?.returnerRace || '').trim();
-  const parsedReturner = explicitRace ? parseRaceDescriptor(explicitRace) : null;
-  const fatherRace = parsedReturner?.race
-    || parseRaceDescriptor(returnerBase.race || motherRace).race
-    || motherRace;
-  const fetusRace = deriveFetusRace(motherRace, fatherRace);
-  const fatherDerivedType = parsedReturner?.derivedType
-    || (returnerBase.derivedType ? String(returnerBase.derivedType) : null);
-  const derivedSeed = getDerivedTypeSeed(base.derivedType ? String(base.derivedType) : null, fatherDerivedType);
+  // 种族锁死人类：returnerRace 参数仅作兼容，不再读取
+  const fatherRace = '人类';
 
   pregnant.fetuses = [{
     embryoId: 1,
@@ -880,16 +855,14 @@ function applyWombReturn(chatState, args) {
     fathers: returnerName,
     provider: null,
     providerSources: [],
-    race: fetusRace,
+    race: '人类',
     fatherRace,
-    fatherDerivedType,
-    gender: deriveFetusGender(fetusRace),
-    embryoType: deriveFetusEmbryoType(fetusRace),
+    gender: deriveFetusGender(),
+    embryoType: '胎生',
     // 刚进去时是一个成人的体积，之后随回归期线性回落到 1.0
     weight: WOMB_RETURN_PEAK_WEIGHT,
     tendencyAngle: randomInt(0, 360),
-    affinity: derivedSeed.affinity,
-    maternalDerivedTypeProgress: derivedSeed.progress,
+    affinity: 0,
     // 天赋跟着回归者走，技能不传：身体是新的，资质是旧的
     talents: normalizeTalentList(returnerProfile.talents),
   }];
@@ -1039,42 +1012,9 @@ function shuffleInPlace(list) {
   }
 }
 
-function getRaceComponents(race) {
-  return getConfiguredRaceComponents(race);
-}
-
-function isSameRaceGroup(leftRace, rightRace) {
-  const left = getRaceComponents(leftRace).sort();
-  const right = getRaceComponents(rightRace).sort();
-  if (left.length === 0 || right.length === 0 || left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
-}
-
-function deriveFetusRace(motherRace, fatherRace) {
-  // 血统显示保留每个种族的 -装饰子项；生理运算另用 getRaceComponents 取基础种族。
-  const motherParts = getRaceDescriptorComponents(motherRace);
-  const fatherParts = getRaceDescriptorComponents(fatherRace);
-  const combined = [...fatherParts, ...motherParts].filter(Boolean);
-  if (combined.length === 0) return '人类';
-  // 必须去重，否则同族生育会得到「人类x人类」这种自我混血的种族。
-  // race_prompt_context.js 的同名函数一直有去重，这里漏了。
-  const unique = [];
-  for (const part of combined) {
-    if (!unique.includes(part)) unique.push(part);
-  }
-  return unique.join('x');
-}
-
-function deriveFetusEmbryoType(race) {
-  return getEmbryoTypeByRace(race);
-}
-
-function deriveFetusGender(race) {
-  const profile = getMergedRacePhysiologyProfile(race);
-  if (profile?.genderRatio === -1) return '无';
-  if (profile?.genderRatio === null) return '双';
-  const ratio = clampNumber(profile?.genderRatio, 0, 100, 50);
-  return Math.random() < (ratio / 100) ? '男' : '女';
+function deriveFetusGender() {
+  // 人类锁死：50/50。无性/双性的特殊 genderRatio 随种族系统一并移除。
+  return Math.random() < 0.5 ? '男' : '女';
 }
 
 function getConceptionWeight(stage, gender, weightRatio = 1.0) {
@@ -1209,51 +1149,6 @@ function pickImplantedFetusIndex(fetuses) {
   return eligible[randomInt(0, eligible.length - 1)];
 }
 
-function getConceptionWeightRatio(profile, sperm) {
-  const motherBreedTolerance = clampNumber(profile?.bio?.breedTolerance, 0.1, 100, 1.0);
-  const fatherProfile = getMergedRacePhysiologyProfile(sperm?.race);
-  const fatherBreedTolerance = clampNumber(fatherProfile?.breedTolerance, 0.1, 100, 1.0);
-  const dominance = (fatherBreedTolerance - motherBreedTolerance) / Math.max(motherBreedTolerance + fatherBreedTolerance, 0.1);
-  return clampNumber(1 + (dominance * 0.65), 0.625, 1.6, 1.0);
-}
-
-function getDerivedTypeSeed(motherDerivedType, fatherDerivedType) {
-  const mother = motherDerivedType ? String(motherDerivedType) : null;
-  const father = fatherDerivedType ? String(fatherDerivedType) : null;
-  if (!mother && !father) return { affinity: 0, progress: 0 };
-  if (mother && father && mother === father) return { affinity: 30, progress: 30 };
-  if (mother && father && mother !== father) return { affinity: -30, progress: -30 };
-  return { affinity: 15, progress: 0 };
-}
-
-function updateDerivedTypeProgress(profile, tick) {
-  const base = profile.base || {};
-  const pregnant = profile.pregnant || {};
-  const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
-  const motherDerivedType = base.derivedType ? String(base.derivedType) : null;
-  const passedDays = Math.max(0, tick.passedDays);
-  if (fetuses.length === 0 || passedDays <= 0) return;
-
-  for (const fetus of fetuses) {
-    const fatherDerivedType = fetus?.fatherDerivedType ? String(fetus.fatherDerivedType) : null;
-    if (!motherDerivedType && !fatherDerivedType) continue;
-    const currentProgress = clampNumber(fetus?.maternalDerivedTypeProgress, -100, 100, 0);
-    if (currentProgress === 0) continue;
-
-    const direction = Math.sign(currentProgress);
-    const affinity = clampNumber(fetus?.affinity, -50, 50, 0);
-    const alignment = direction * affinity;
-    const factor = clampNumber(1 + (alignment / 30), 0, 3, 1);
-    const activeDerivedType = direction > 0 ? motherDerivedType : fatherDerivedType;
-    const inheritanceSpeed = clampNumber(getDerivedTypeInheritanceProfile(activeDerivedType)?.inheritanceSpeed, 0.2, 3.0, 1.0);
-    const delta = direction * passedDays * 3 * factor * inheritanceSpeed;
-    fetus.maternalDerivedTypeProgress = clampNumber(currentProgress + delta, -100, 100, currentProgress);
-  }
-
-  pregnant.fetuses = fetuses;
-  profile.pregnant = pregnant;
-}
-
 function cloneIdenticalFetus(fetus) {
   return {
     ...fetus,
@@ -1321,37 +1216,18 @@ function getFetusMaternalSources(fetus, carrierName) {
   return uniqueNonEmptyStrings([provider || carrierName]);
 }
 
-function combineRaceDescriptors(...values) {
-  return uniqueNonEmptyStrings(values.flatMap((value) => getRaceDescriptorComponents(value))).join('x') || '人类';
+/**
+ * 嵌合（多父同期受精的胚胎融合）概率，单位 %。
+ * 原版由双方种族的同卵率/受精难度/胚型与衍生类型推算；锁死人类后
+ * 全部输入坍缩为常量：√(5×5) × 2/(1+√(1×1)) × 1 = 5。
+ */
+export const CHIMERA_FUSION_BASE_PROBABILITY = 5;
+
+export function calculateChimeraFusionProbability() {
+  return CHIMERA_FUSION_BASE_PROBABILITY;
 }
 
-export function calculateChimeraFusionProbability(fetusA, fetusB) {
-  const derivedA = String(fetusA?.fatherDerivedType || '').trim();
-  const derivedB = String(fetusB?.fatherDerivedType || '').trim();
-  let derivedMultiplier = 1;
-  if (derivedA && derivedB) {
-    if (derivedA !== derivedB) return 0;
-    derivedMultiplier = 1.5;
-  } else if (derivedA || derivedB) {
-    derivedMultiplier = 0.5;
-  }
-
-  const raceA = String(fetusA?.race || '人类');
-  const raceB = String(fetusB?.race || '人类');
-  const physiologyA = getMergedRacePhysiologyProfile(raceA);
-  const physiologyB = getMergedRacePhysiologyProfile(raceB);
-  const identicalA = clampNumber(physiologyA?.identicalProbability, 0, 100, 5);
-  const identicalB = clampNumber(physiologyB?.identicalProbability, 0, 100, 5);
-  const difficultyA = clampNumber(physiologyA?.impregnationDifficulty, 0.1, 100, 1);
-  const difficultyB = clampNumber(physiologyB?.impregnationDifficulty, 0.1, 100, 1);
-  const identicalFactor = Math.sqrt(identicalA * identicalB);
-  const difficultyFactor = 2 / (1 + Math.sqrt(difficultyA * difficultyB));
-  const typeMultiplier = String(fetusA?.embryoType || deriveFetusEmbryoType(raceA))
-    === String(fetusB?.embryoType || deriveFetusEmbryoType(raceB)) ? 1 : 0.25;
-  return clampNumber(identicalFactor * difficultyFactor * typeMultiplier * derivedMultiplier, 0, 75, 0);
-}
-
-function createChimeraFetus(profile, carrierName, fetusA, fetusB, embryoId) {
+function createChimeraFetus(carrierName, fetusA, fetusB, embryoId) {
   const fathers = uniqueNonEmptyStrings([...getFetusFatherSources(fetusA), ...getFetusFatherSources(fetusB)]);
   const maternalSources = uniqueNonEmptyStrings([
     ...getFetusMaternalSources(fetusA, carrierName),
@@ -1363,10 +1239,6 @@ function createChimeraFetus(profile, carrierName, fetusA, fetusB, embryoId) {
   const gender = hasMale && hasFemale
     ? '待定'
     : (genderSources[0] === genderSources[1] ? genderSources[0] : (genderSources.includes('双') ? '双' : genderSources[0]));
-  const fatherDerivedType = fetusA?.fatherDerivedType || fetusB?.fatherDerivedType || null;
-  const race = combineRaceDescriptors(fetusA?.race, fetusB?.race);
-  const motherDerivedType = profile?.base?.derivedType ? String(profile.base.derivedType) : null;
-  const derivedSeed = getDerivedTypeSeed(motherDerivedType, fatherDerivedType);
   const providerSources = maternalSources.length > 1
     ? maternalSources
     : maternalSources.filter((source) => source !== carrierName);
@@ -1378,15 +1250,13 @@ function createChimeraFetus(profile, carrierName, fetusA, fetusB, embryoId) {
     fathers: fathers.join(' × ') || '未知',
     provider: providerSources.length === 0 ? null : providerSources.join(' × '),
     providerSources,
-    race,
-    fatherRace: combineRaceDescriptors(fetusA?.fatherRace, fetusB?.fatherRace),
-    fatherDerivedType,
+    race: '人类',
+    fatherRace: '人类',
     gender,
-    embryoType: deriveFetusEmbryoType(race),
+    embryoType: '胎生',
     weight: (clampNumber(fetusA?.weight, 0.33, 3, 1) + clampNumber(fetusB?.weight, 0.33, 3, 1)) / 2,
     tendencyAngle: randomInt(0, 360),
-    affinity: derivedSeed.affinity,
-    maternalDerivedTypeProgress: derivedSeed.progress,
+    affinity: 0,
     chimera: {
       sourceCount: (Number(fetusA?.chimera?.sourceCount) || 1) + (Number(fetusB?.chimera?.sourceCount) || 1),
       fatherSources: fathers,
@@ -1426,7 +1296,7 @@ function applyChimeraFusion(profile, carrierName) {
     if (probability > 0 && Math.random() < probability / 100) {
       consumed.add(fetusA.embryoId);
       consumed.add(fetusB.embryoId);
-      fused.push(createChimeraFetus(profile, carrierName, fetusA, fetusB, nextId));
+      fused.push(createChimeraFetus(carrierName, fetusA, fetusB, nextId));
       nextId += 1;
     }
   }
@@ -1461,12 +1331,11 @@ function applyIdenticalSplit(profile, batch = null) {
       continue;
     }
     result.push(baseFetus);
-    const physiology = getMergedRacePhysiologyProfile(baseFetus?.race);
     const splitRate = clampNumber(
-      physiology?.identicalProbability,
+      profile?.bio?.identicalProbability,
       0,
       100,
-      clampNumber(profile?.bio?.identicalProbability, 0, 100, 5),
+      5,
     ) / 100;
     let targetCount = 1;
     if (splitRate > 0 && Math.random() < splitRate) {
@@ -1496,20 +1365,11 @@ function applyIdenticalSplit(profile, batch = null) {
 }
 
 /**
- * @param profile 承载妊娠的角色（决定孕育环境：体重倍率、亲和度种子）
+ * @param profile 承载妊娠的角色（决定孕育环境）
  * @param options.geneticProfile 提供卵子的一方；代孕／注卵时与承载者不同。
- *        胎儿种族按她推导；母系衍生类型始终来自实际孕育胚胎的承载者。
  */
 function createSimpleFetus(profile, sperm, cycleStage, options = {}) {
-  const geneticProfile = options.geneticProfile || profile;
-  const motherRace = parseRaceDescriptor(geneticProfile?.base?.race || '人类').race || '人类';
-  const fatherRace = parseRaceDescriptor(sperm?.race || motherRace || '人类').race || motherRace || '人类';
-  const fetusRace = deriveFetusRace(motherRace, fatherRace);
-  const gender = deriveFetusGender(fetusRace);
-  const weightRatio = getConceptionWeightRatio(profile, sperm);
-  const motherDerivedType = profile?.base?.derivedType ? String(profile.base.derivedType) : null;
-  const fatherDerivedType = sperm?.derivedType ? String(sperm.derivedType) : null;
-  const derivedSeed = getDerivedTypeSeed(motherDerivedType, fatherDerivedType);
+  const gender = deriveFetusGender();
   return {
     embryoId: null,
     fusionCheckedWith: [],
@@ -1519,15 +1379,13 @@ function createSimpleFetus(profile, sperm, cycleStage, options = {}) {
     // 自然受精恒为 null；代孕／注卵由植入工具指定归属
     provider: options.provider ? String(options.provider) : null,
     providerSources: options.provider ? [String(options.provider)] : [],
-    race: fetusRace,
-    fatherRace,
-    fatherDerivedType,
+    race: '人类',
+    fatherRace: '人类',
     gender,
-    embryoType: deriveFetusEmbryoType(fetusRace),
-    weight: getConceptionWeight(cycleStage, gender, weightRatio),
+    embryoType: '胎生',
+    weight: getConceptionWeight(cycleStage, gender),
     tendencyAngle: randomInt(0, 360),
-    affinity: derivedSeed.affinity,
-    maternalDerivedTypeProgress: derivedSeed.progress,
+    affinity: 0,
   };
 }
 
@@ -1546,22 +1404,6 @@ function updateFetalEnergyDrain(profile) {
     const fetusEnergyDrain = fetalLoad / motherBreedTolerance;
     return sum + fetusEnergyDrain;
   }, 0);
-}
-
-function getEmbryoTypeModifiers(embryoType) {
-  switch (String(embryoType || '胎生')) {
-    case '卵生':
-      return { recoveryCoefficient: 0.6 };
-    case '卵胎生':
-      return { recoveryCoefficient: 0.4 };
-    case '胎转卵生':
-      return { recoveryCoefficient: 1.0 };
-    case '不定型':
-      return { recoveryCoefficient: 0.8 };
-    case '胎生':
-    default:
-      return { recoveryCoefficient: 0.2 };
-  }
 }
 
 function snapshotOriginalPregnancyBio(character) {
@@ -1592,41 +1434,27 @@ function applyPregnancyPhysiology(profile, runtime) {
   };
 
   let totalWeight = 0;
-  let gestationDaysAccumulator = 0;
-  let gestationCount = 0;
-  let birthAccumulator = 0;
-  let birthCount = 0;
   let recoveryAccumulator = 0;
 
   for (const fetus of fetuses) {
     const weight = clampNumber(fetus?.weight, 0.33, 3.0, 1.0);
-    const embryoModifiers = getEmbryoTypeModifiers(fetus?.embryoType);
-    const raceProfile = getMergedRacePhysiologyProfile(fetus?.race) || {};
-
     totalWeight += weight;
-    const gestationSpeed = clampNumber(raceProfile.gestationSpeciesSpeed, 0.1, 20, 1.0);
-    gestationDaysAccumulator += 280 / gestationSpeed;
-    gestationCount += 1;
-    birthAccumulator += clampNumber(raceProfile.birthDifficulty, 0.1, 100, 1.0);
-    birthCount += 1;
-    recoveryAccumulator += weight * embryoModifiers.recoveryCoefficient;
+    // 胎生恢复系数 0.2；其余胚型随种族系统移除
+    recoveryAccumulator += weight * 0.2;
   }
 
-  const averageGestationDays = gestationDaysAccumulator / Math.max(gestationCount, 1);
-  const averageGestation = averageGestationDays > 0 ? 280 / averageGestationDays : 1.0;
-  const averageBirth = birthAccumulator / Math.max(birthCount, 1);
   const averageRecoveryCoefficient = recoveryAccumulator / Math.max(totalWeight, 0.33);
   const fetusCountModifier = 1 + ((fetuses.length - 1) * 0.08);
   const toleranceCountModifier = Math.max(0.6, 1 - ((fetuses.length - 1) * 0.04));
   const gestationModifierMultiplier = getGestationModifierMultiplier(profile);
 
-  const gestationEffectiveSpeed = clampNumber(averageGestation * gestationModifierMultiplier, 0, 20, averageGestation);
-  const recoveryGestationSpeed = Math.max(0.1, gestationEffectiveSpeed > 0 ? gestationEffectiveSpeed : averageGestation);
-  const birthDifficulty = clampNumber(averageBirth * fetusCountModifier, 0.1, 100, originalBio.birthDifficulty);
+  // 人类锁死：妊娠速度与分娩难度恒 1.0，剩下真正影响妊娠参数的只有
+  // 胎数修正与用户的 gestationModifier。
+  const gestationEffectiveSpeed = clampNumber(gestationModifierMultiplier, 0, 20, 1.0);
+  const recoveryGestationSpeed = Math.max(0.1, gestationEffectiveSpeed > 0 ? gestationEffectiveSpeed : 1.0);
+  const birthDifficulty = clampNumber(fetusCountModifier, 0.1, 100, originalBio.birthDifficulty);
   // 承载耐受只取母体自身 x 胎数修正：breedTolerance 描述「这具身体多能扛妊娠」，
-  // 是承载者的属性。此前还乘上胎儿族的 breedTolerance，等于把胎儿族的承载力
-  // 当成母体的加成——人类怀龙胎会变成十倍耐受，比怀人类胎还轻松，方向是反的。
-  // 跨种族的额外负担已由 getConceptionWeightRatio 换算成胎重，不该在这里再算一遍。
+  // 是承载者的属性。
   const breedTolerance = clampNumber(originalBio.breedTolerance * toleranceCountModifier, 0.1, 100, originalBio.breedTolerance);
   const recoveryDays = Math.max(
     1,
@@ -1635,7 +1463,7 @@ function applyPregnancyPhysiology(profile, runtime) {
 
   profile.bio = {
     ...(profile.bio || {}),
-    gestationSpeciesSpeed: clampNumber(averageGestation, 0.1, 20, 1.0),
+    gestationSpeciesSpeed: 1.0,
     gestationEffectiveSpeed,
     birthDifficulty,
     breedTolerance,
@@ -1661,7 +1489,6 @@ function restorePregnancyPhysiology(profile, runtime) {
 }
 
 function isObliquePosition(angle, fetus) {
-  if (fetus && (fetus.embryoType === '胎转卵生' || fetus.embryoType === '不定型')) return false;
   const normalized = wrapAngle(angle);
   if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return false;
   if (normalized >= 165 && normalized <= 195) return false;
@@ -1700,45 +1527,8 @@ function getRealisticLaborObstruction(fetuses) {
 }
 
 function calculatePositionDifficulty(angle, fetus) {
+  // 人类锁死：只剩胎生的角度规则，其余胚型的特化难度随种族系统移除。
   const normalized = wrapAngle(angle);
-  const embryoType = String(fetus?.embryoType || '胎生');
-
-  if (embryoType === '胎转卵生') {
-    const targetAngles = [0, 90, 180, 270, 360];
-    let minDistance = 360;
-    for (const targetAngle of targetAngles) {
-      let distance = Math.abs(normalized - targetAngle);
-      if (targetAngle === 360) distance = Math.min(distance, Math.abs(normalized - 0));
-      if (distance < minDistance) minDistance = distance;
-    }
-    if (minDistance <= 5) return 1.5;
-    return Math.min(2.25, 1.5 + ((minDistance - 5) * 0.075));
-  }
-
-  if (embryoType === '不定型') {
-    const race = String(fetus?.race || '人类');
-    const combinedSeed = Math.round(normalized * 1000) + race.charCodeAt(0) + race.charCodeAt(Math.max(0, race.length - 1));
-    const seededValue = ((combinedSeed * 1664525 + 1013904223) % 2147483648) / 2147483648;
-    return 1.0 + seededValue;
-  }
-
-  if (embryoType === '卵胎生') {
-    if ((normalized >= 0 && normalized <= 5) || (normalized >= 355 && normalized <= 360)) return 1.0;
-    if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.25;
-    if (normalized >= 175 && normalized <= 185) return 1.5;
-    if (normalized >= 165 && normalized <= 195) return 1.75;
-    if ((normalized >= 85 && normalized <= 95) || (normalized >= 275 && normalized <= 285)) return 2.0;
-    if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 2.25;
-    return 1.33;
-  }
-
-  if (embryoType === '卵生') {
-    if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.0;
-    if (normalized >= 165 && normalized <= 195) return 1.0;
-    if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 1.5;
-    return 1.33;
-  }
-
   if ((normalized >= 0 && normalized <= 15) || (normalized >= 345 && normalized <= 360)) return 1.0;
   if (normalized >= 165 && normalized <= 195) return 1.5;
   if ((normalized >= 75 && normalized <= 105) || (normalized >= 265 && normalized <= 285)) return 2.0;
@@ -1903,7 +1693,16 @@ function updateProdromalFetalPositions(profile, tick) {
 }
 
 function stageAllowsSpermRetention(stage) {
-  return MENSTRUAL_STAGES.includes(stage) || PREGNANCY_STAGES.includes(stage) || stage === '产后恢复' || stage === '假孕期';
+  // 哺乳期也保留精液（否则每 tick 被清，bsAddSperm 变静默空操作）；
+  // 受精被 allowsNaturalConception 排除，留而不孕。
+  // 停经/围绝经期晚期同理：无套内射的物理事实照常发生，只是不会受孕。
+  return MENSTRUAL_STAGES.includes(stage)
+    || PREGNANCY_STAGES.includes(stage)
+    || stage === '产后恢复'
+    || stage === '假孕期'
+    || stage === '哺乳期'
+    || stage === '停经'
+    || stage === '围绝经期晚期';
 }
 
 function processSpermLifecycle(profile, stage, tick) {
@@ -1949,13 +1748,8 @@ function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceF
     let winner = null;
     for (const sperm of availableSperms) {
       const share = totalSperm > 0 ? clampNumber(sperm?.value, 0, 999999, 0) / totalSperm : 0;
-      const maleDifficulty = clampNumber(getMergedRacePhysiologyProfile(sperm?.race)?.impregnationDifficulty, 0.1, 100, 1.0);
-      const isSameRace = isSameRaceGroup(profile?.base?.race, sperm?.race);
-      let effectiveDifficulty = isSameRace ? femaleDifficulty : (femaleDifficulty + maleDifficulty);
-      const femaleEmbryoType = deriveFetusEmbryoType(profile?.base?.race);
-      const maleEmbryoType = deriveFetusEmbryoType(sperm?.race);
-      if (femaleEmbryoType !== maleEmbryoType) effectiveDifficulty *= 1.5;
-      const spermBaseChance = Math.max(0.001, Math.min(0.8, (deltaDays * 12 * 0.5) / effectiveDifficulty));
+      // 人类锁死：只有母体自身的受精难度；跨种加成与胚型错配随种族系统移除。
+      const spermBaseChance = Math.max(0.001, Math.min(0.8, (deltaDays * 12 * 0.5) / femaleDifficulty));
       const spermChance = Math.max(0, Math.min(0.8, spermBaseChance * share * chanceFactor));
       if (spermChance > 0 && Math.random() <= spermChance) {
         winner = sperm;
@@ -2096,6 +1890,10 @@ function processSimpleConception(profile, tick, notify, name) {
   const fullDays = tick.passedDays;
   const passedHours = tick.passedHours;
   const allowsNaturalConception = [...MENSTRUAL_STAGES, '产后恢复'].includes(stage);
+  // 围绝经期早期（仍在周期内）生育力衰退：年龄每超过停经门槛前 5 年，
+  // 受精概率线性下降，逼近停经时接近零。围绝经期晚期/停经不在此列
+  // ——它们已经不是周期阶段，conception 闸门本来就关着。
+  const perimenopauseFertilityFactor = getPerimenopauseFertilityFactor(profile);
 
   if (allowsNaturalConception) {
     // 一次性排出本周期的份额：按天累加会让长排卵期窗口把卵数堆到上限，
@@ -2111,7 +1909,7 @@ function processSimpleConception(profile, tick, notify, name) {
       base.eggs = Math.max(0, clampNumber(base.eggs, 0, 99, 0) - fullDays);
     }
 
-    base.eggs = attemptFertilization(profile, { deltaDays, stage, name, notify });
+    base.eggs = attemptFertilization(profile, { deltaDays, stage, name, notify, chanceFactor: perimenopauseFertilityFactor });
   } else if (stage === SUPERFETATION_STAGE) {
     // 异期复孕。卵不是这里排的——高潮排卵本来就不挡妊娠，而孕期中卵子既不衰减
     // 也不清除，所以「这个周期没用掉的排卵留到孕早期」是现成行为，不必新增。
@@ -2151,6 +1949,8 @@ function processSimpleConception(profile, tick, notify, name) {
       } else {
         const obstetricPregnantDays = base.fertilizationDays + getObstetricPregnancyOffsetDays(profile);
         const gestationSpeed = clampNumber(getGestationEffectiveSpeed(profile), 0, 20, 1);
+        // 产后恢复期可再孕：新妊娠＝断奶， pendingLactation 就地作废
+        delete base.pendingLactation;
         applyIdenticalSplit(profile);
         resolvePendingChimeraGenders(pregnant.fetuses);
         base.stage = '孕早期';
@@ -2208,29 +2008,7 @@ function isTruePregnancyStage(stage) {
 
 function canProduceMilk(profile) {
   const stage = String(profile?.base?.stage || '');
-  return stage === '假孕期' || stage === '产后恢复' || isTruePregnancyStage(stage);
-}
-
-function hasDerivedMetabolism(profile) {
-  return Boolean(String(profile?.base?.derivedType || '').trim());
-}
-
-function getMetabolismExemptionSet(profile) {
-  if (!hasDerivedMetabolism(profile)) return new Set();
-  return new Set(getDerivedTypeMetabolismExemptions(profile?.base?.derivedType));
-}
-
-function isMetabolismExempt(profile, key) {
-  return getMetabolismExemptionSet(profile).has(key);
-}
-
-function applyDerivedMetabolismExemptions(profile) {
-  if (!hasDerivedMetabolism(profile)) return;
-  const metabolism = profile.metabolism || {};
-  for (const key of getMetabolismExemptionSet(profile)) {
-    metabolism[key] = 0;
-  }
-  profile.metabolism = metabolism;
+  return stage === '假孕期' || stage === '产后恢复' || stage === '哺乳期' || isTruePregnancyStage(stage);
 }
 
 const BASE_METABOLISM_CAP = 150;
@@ -2243,7 +2021,7 @@ function getActiveExpansion(profile, key, currentFlux = 0) {
   const isMatch = expansionKey === key
     || (key === 'flux' && currentFlux > 0 && expansionKey === 'fluxPositive')
     || (key === 'flux' && currentFlux < 0 && expansionKey === 'fluxNegative');
-  return isMatch && !isMetabolismExempt(profile, key);
+  return isMatch;
 }
 
 function getMetabolismCap(profile, key, currentFlux = 0) {
@@ -2253,20 +2031,13 @@ function getMetabolismCap(profile, key, currentFlux = 0) {
 function applyMetabolismCapacityLimits(profile) {
   const metabolism = profile?.metabolism || {};
   for (const key of ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship']) {
-    metabolism[key] = isMetabolismExempt(profile, key)
-      ? 0
-      : clampNumber(metabolism[key], 0, getMetabolismCap(profile, key), 0);
-  }
-  if (hasDerivedMetabolism(profile)) {
-    const flux = Number(metabolism.flux) || 0;
-    const cap = getMetabolismCap(profile, 'flux', flux);
-    metabolism.flux = clampNumber(flux, -cap, cap, 0);
+    metabolism[key] = clampNumber(metabolism[key], 0, getMetabolismCap(profile, key), 0);
   }
   profile.metabolism = metabolism;
 }
 
 function addMetabolismValue(profile, key, delta, min = 0, max = 150) {
-  if (!delta || profile?.immune?.metabolism || isMetabolismExempt(profile, key)) return 0;
+  if (!delta || profile?.immune?.metabolism) return 0;
   const metabolism = profile.metabolism || {};
   const activeMax = max === BASE_METABOLISM_CAP ? getMetabolismCap(profile, key, Number(metabolism[key]) || 0) : max;
   const current = clampNumber(metabolism[key], min, activeMax, 0);
@@ -2280,6 +2051,7 @@ function addMetabolismValue(profile, key, delta, min = 0, max = 150) {
 function getMilkFetalLoad(profile) {
   const stage = String(profile?.base?.stage || '');
   if (stage === '产后恢复') return 1.35;
+  if (stage === '哺乳期') return 1.5;
   if (stage === '假孕期') return 0.08;
   if (!isTruePregnancyStage(stage)) return 0;
 
@@ -2316,6 +2088,7 @@ const PREGNANCY_BLOCKAGE_STAGE_CHANCE = Object.freeze({
   第二产程: 65,
   第三产程: 35,
   产后恢复: 25,
+  哺乳期: 20,
 });
 
 const PREGNANCY_BLOCKAGE_STAGE_SEVERITY = Object.freeze({
@@ -2330,6 +2103,7 @@ const PREGNANCY_BLOCKAGE_STAGE_SEVERITY = Object.freeze({
   第二产程: 0.45,
   第三产程: 0.25,
   产后恢复: 0.22,
+  哺乳期: 0.20,
 });
 
 const PREGNANCY_BLOCKAGE_STAGE_WEIGHTS = Object.freeze({
@@ -2344,6 +2118,7 @@ const PREGNANCY_BLOCKAGE_STAGE_WEIGHTS = Object.freeze({
   第二产程: { excretion: 5, sleep: 4, odor: 2, milk: 2, companionship: 2, hunger: 1 },
   第三产程: { sleep: 4, odor: 3, milk: 3, companionship: 3, excretion: 2, hunger: 1 },
   产后恢复: { milk: 5, sleep: 4, companionship: 4, odor: 3, excretion: 2, hunger: 1 },
+  哺乳期: { milk: 6, sleep: 3, companionship: 3, odor: 2, excretion: 1, hunger: 1 },
 });
 
 const PREGNANCY_BLOCKAGE_KEY_SEVERITY_MULTIPLIER = Object.freeze({
@@ -2353,8 +2128,6 @@ const PREGNANCY_BLOCKAGE_KEY_SEVERITY_MULTIPLIER = Object.freeze({
   hunger: 1.15,
   odor: 0.85,
   companionship: 1.0,
-  fluxPositive: 1.25,
-  fluxNegative: 1.25,
 });
 
 const PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP = Object.freeze({
@@ -2364,8 +2137,6 @@ const PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP = Object.freeze({
   hunger: 0.75,
   odor: 0.65,
   companionship: 0.75,
-  fluxPositive: 0.85,
-  fluxNegative: 0.85,
 });
 
 function canHavePregnancyBlockage(profile) {
@@ -2376,15 +2147,12 @@ function canHavePregnancyBlockage(profile) {
     || stage === '假孕期'
     || stage === '产兆前驱'
     || LABOR_STAGES.includes(stage)
-    || stage === '产后恢复';
+    || stage === '产后恢复'
+    || stage === '哺乳期';
 }
 
 function getAvailablePregnancySymptomKeys(profile) {
-  const isDerived = hasDerivedMetabolism(profile);
-  const exemptions = getMetabolismExemptionSet(profile);
-  const keys = ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship'].filter((key) => !exemptions.has(key));
-  if (isDerived) keys.push('fluxPositive', 'fluxNegative');
-  return keys;
+  return ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship'];
 }
 
 function getPregnancyBlockageChance(profile) {
@@ -2430,11 +2198,6 @@ function pickPregnancySymptomKey(profile, excludedKeys = []) {
   if (available.size === 0) return null;
   const stage = String(profile?.base?.stage || '');
   const weights = { ...(PREGNANCY_BLOCKAGE_STAGE_WEIGHTS[stage] || {}) };
-  if (hasDerivedMetabolism(profile)) {
-    const flux = Number(profile?.metabolism?.flux) || 0;
-    weights.fluxPositive = (weights.fluxPositive || 1) + (flux > 0 ? 3 : 0);
-    weights.fluxNegative = (weights.fluxNegative || 1) + (flux < 0 ? 3 : 0);
-  }
   for (const key of Object.keys(weights)) {
     if (!available.has(key)) delete weights[key];
   }
@@ -2473,13 +2236,7 @@ function getActiveBlockageRetention(profile, key, currentFlux = 0) {
   if (!blockage || typeof blockage !== 'object') return 0;
   const blockageKey = String(blockage.key || '').trim();
   if (!blockageKey) return 0;
-  if (blockageKey === 'fluxPositive') {
-    return hasDerivedMetabolism(profile) && currentFlux > 0 ? clampNumber(blockage.severity, 0, PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP.fluxPositive, 0) : 0;
-  }
-  if (blockageKey === 'fluxNegative') {
-    return hasDerivedMetabolism(profile) && currentFlux < 0 ? clampNumber(blockage.severity, 0, PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP.fluxNegative, 0) : 0;
-  }
-  if (blockageKey !== key || isMetabolismExempt(profile, key)) return 0;
+  if (blockageKey !== key) return 0;
   return clampNumber(blockage.severity, 0, PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP[key] || 0.75, 0);
 }
 
@@ -2487,10 +2244,7 @@ function getActiveAccelerationMultiplier(profile, key, currentFlux = 0) {
   const acceleration = profile?.pregnant?.acceleration;
   if (!acceleration || typeof acceleration !== 'object') return 1;
   const accelerationKey = String(acceleration.key || '').trim();
-  const isMatch = accelerationKey === key
-    || (key === 'flux' && currentFlux > 0 && accelerationKey === 'fluxPositive')
-    || (key === 'flux' && currentFlux < 0 && accelerationKey === 'fluxNegative');
-  if (!isMatch || isMetabolismExempt(profile, key)) return 1;
+  if (accelerationKey !== key) return 1;
   const cap = PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP[accelerationKey] || 0.75;
   return 1 + clampNumber(acceleration.severity, 0, cap, 0);
 }
@@ -2547,13 +2301,6 @@ function applyAccelerationRebound(profile, key, relievedAmount) {
   return addMetabolismValue(profile, key, released * severity * 0.25, 0, 150);
 }
 
-function getDerivedFluxDirection(currentFlux, fallbackDirection = 1) {
-  const current = Number(currentFlux) || 0;
-  if (current > 0) return 1;
-  if (current < 0) return -1;
-  return fallbackDirection >= 0 ? 1 : -1;
-}
-
 function shouldResetOrgasmOvulation(stage) {
   return stage === '月经期' || stage === '产后恢复';
 }
@@ -2584,22 +2331,12 @@ function applyHourlyPregnancyMetabolism(profile, tick, female) {
   if (tick.passedHours <= 0) return;
 
   const pregnant = profile?.pregnant || {};
-  const metabolism = profile?.metabolism || {};
   const fetalEnergyDrain = clampNumber(pregnant.fetalEnergyDrain, 0, 9999, 0);
   const delta = (1 + fetalEnergyDrain) * 2 * tick.passedHours;
 
-  if (hasDerivedMetabolism(profile)) {
-    const stressMultiplier = clampNumber(1 + ((clampNumber(profile?.base?.psyStress, 0, 200, 100) - 100) / 200), 0.5, 1.5, 1.0);
-    const direction = getDerivedFluxDirection(metabolism.flux, 1);
-    const acceleration = getActiveAccelerationMultiplier(profile, 'flux', Number(metabolism.flux) || direction);
-    const fluxCap = getMetabolismCap(profile, 'flux', Number(metabolism.flux) || direction);
-    metabolism.flux = clampNumber((Number(metabolism.flux) || 0) + (delta * stressMultiplier * direction * acceleration), -fluxCap, fluxCap, metabolism.flux || 0);
-    profile.metabolism = metabolism;
-  }
   addMetabolismValue(profile, 'excretion', delta, 0, 150);
   addMetabolismValue(profile, 'hunger', delta, 0, 150);
   addMetabolismValue(profile, 'sleep', delta, 0, 150);
-  applyDerivedMetabolismExemptions(profile);
 
   const vitality = clampNumber(profile?.base?.vitality, 0, 200, 100);
   const days = Math.max(1, Math.ceil(tick.deltaDays));
@@ -2695,21 +2432,7 @@ function applyNaturalMetabolismRecovery(profile, tick) {
     profile.metabolism = metabolism;
     return;
   }
-  applyDerivedMetabolismExemptions(profile);
-
   const passedDays = Math.max(0, tick.passedDays);
-
-  if (hasDerivedMetabolism(profile)) {
-    if (passedDays > 0) {
-      const fluxCap = getMetabolismCap(profile, 'flux', Number(metabolism.flux) || 0);
-      const currentFlux = clampNumber(metabolism.flux, -fluxCap, fluxCap, 0);
-      const recovery = 14 * passedDays;
-      if (currentFlux > 0) metabolism.flux = Math.max(0, currentFlux - recovery);
-      else if (currentFlux < 0) metabolism.flux = Math.min(0, currentFlux + recovery);
-      else metabolism.flux = 0;
-    }
-    profile.metabolism = metabolism;
-  }
 
   if (passedDays <= 0) return;
 
@@ -2717,10 +2440,9 @@ function applyNaturalMetabolismRecovery(profile, tick) {
   const dayHungerRecovery = 16 * passedDays;
   const daySleepRecovery = 18 * passedDays;
 
-  metabolism.excretion = isMetabolismExempt(profile, 'excretion') ? 0 : Math.max(0, clampNumber(metabolism.excretion, 0, getMetabolismCap(profile, 'excretion'), 0) - dayExcretionRecovery);
-  metabolism.hunger = isMetabolismExempt(profile, 'hunger') ? 0 : Math.max(0, clampNumber(metabolism.hunger, 0, getMetabolismCap(profile, 'hunger'), 0) - dayHungerRecovery);
-  metabolism.sleep = isMetabolismExempt(profile, 'sleep') ? 0 : Math.max(0, clampNumber(metabolism.sleep, 0, getMetabolismCap(profile, 'sleep'), 0) - daySleepRecovery);
-  applyDerivedMetabolismExemptions(profile);
+  metabolism.excretion = Math.max(0, clampNumber(metabolism.excretion, 0, getMetabolismCap(profile, 'excretion'), 0) - dayExcretionRecovery);
+  metabolism.hunger = Math.max(0, clampNumber(metabolism.hunger, 0, getMetabolismCap(profile, 'hunger'), 0) - dayHungerRecovery);
+  metabolism.sleep = Math.max(0, clampNumber(metabolism.sleep, 0, getMetabolismCap(profile, 'sleep'), 0) - daySleepRecovery);
   profile.metabolism = metabolism;
 }
 
@@ -2730,14 +2452,11 @@ function applyWeeklyMetabolismRoutine(profile, tick, options = {}) {
   const settledWeeks = Math.max(0, Math.floor(Number(tick.passedLifestyleWeeks) || 0));
   if (settledWeeks > 0) {
     metabolism.odor = 0;
-    metabolism.companionship = isMetabolismExempt(profile, 'companionship')
-      ? 0
-      : Math.max(0, clampNumber(metabolism.companionship, 0, getMetabolismCap(profile, 'companionship'), 0) - (35 * settledWeeks));
+    metabolism.companionship = Math.max(0, clampNumber(metabolism.companionship, 0, getMetabolismCap(profile, 'companionship'), 0) - (35 * settledWeeks));
   }
   if (options.enteredFollicular && !canProduceMilk({ ...profile, base: { ...(profile.base || {}), stage: options.stage } })) {
     metabolism.milk = 0;
   }
-  applyDerivedMetabolismExemptions(profile);
   profile.metabolism = metabolism;
 }
 
@@ -2751,21 +2470,12 @@ function applyMetabolismFromVitality(profile, changeValue) {
   const delta = Math.abs(Number(changeValue) || 0) * stressMultiplier;
   if (delta <= 0) return;
 
-  if (hasDerivedMetabolism(profile)) {
-    const direction = getDerivedFluxDirection(metabolism.flux, Math.sign(Number(changeValue) || 1));
-    const acceleration = getActiveAccelerationMultiplier(profile, 'flux', Number(metabolism.flux) || direction);
-    const fluxCap = getMetabolismCap(profile, 'flux', Number(metabolism.flux) || direction);
-    metabolism.flux = clampNumber((Number(metabolism.flux) || 0) + (delta * direction * acceleration), -fluxCap, fluxCap, metabolism.flux || 0);
-    profile.metabolism = metabolism;
-  }
-
   if (changeValue > 0) {
     addMetabolismValue(profile, 'excretion', delta, 0, 150);
   } else {
     addMetabolismValue(profile, 'hunger', delta, 0, 150);
     addMetabolismValue(profile, 'sleep', delta, 0, 150);
   }
-  applyDerivedMetabolismExemptions(profile);
 }
 
 function getMetabolismLevel(value, cap = BASE_METABOLISM_CAP) {
@@ -2776,14 +2486,6 @@ function getMetabolismLevel(value, cap = BASE_METABOLISM_CAP) {
   if (value >= 50 * scale) return '中';
   if (value >= 25 * scale) return '低';
   return '无';
-}
-
-function getDerivedFluxLevel(value, cap = BASE_METABOLISM_CAP) {
-  return getMetabolismLevel(Math.abs(Number(value) || 0), cap);
-}
-
-function getDerivedFluxNeedLabel(value) {
-  return (Number(value) || 0) >= 0 ? '正极释放需求' : '负极释放需求';
 }
 
 function updateAdvisoryNotify(profile, female) {
@@ -2800,7 +2502,7 @@ function updateAdvisoryNotify(profile, female) {
   const odorLevel = getMetabolismLevel(metabolism.odor, getMetabolismCap(profile, 'odor'));
   const companionshipLevel = getMetabolismLevel(metabolism.companionship, getMetabolismCap(profile, 'companionship'));
   const maybePushNeed = (key, label, level) => {
-    if (!isMetabolismExempt(profile, key) && ['高', '满', '爆'].includes(level)) needs.push(`${label}:${level}`);
+    if (['高', '满', '爆'].includes(level)) needs.push(`${label}:${level}`);
   };
 
   maybePushNeed('excretion', '泄意', excretionLevel);
@@ -2811,19 +2513,10 @@ function updateAdvisoryNotify(profile, female) {
   maybePushNeed('companionship', '伴意', companionshipLevel);
 
   const reminders = [];
-  if (hasDerivedMetabolism(profile)) {
-    const fluxCap = getMetabolismCap(profile, 'flux', Number(metabolism.flux) || 0);
-    const flux = clampNumber(metabolism.flux, -fluxCap, fluxCap, 0);
-    if (Math.abs(flux) >= 75) {
-      reminders.push(`${female}的${getDerivedFluxNeedLabel(flux)}已达到${getDerivedFluxLevel(flux, fluxCap)}，应优先使用 bsExcreteMetabolism 进行解放；若释放量足够大，需求极性才会跨过 0 翻转`);
-    }
-    if (needs.length > 0) {
-      reminders.push(`${female}仍有未被衍生代谢抵免的生理需求（${needs.join('、')}），可用 bsExcreteMetabolism 处理`);
-    }
-  } else if (needs.length > 0) {
+  if (needs.length > 0) {
     reminders.push(`${female}有强烈的生理需求（${needs.join('、')}），应优先使用 bsExcreteMetabolism 缓解生理不适`);
   }
-  if (!isMetabolismExempt(profile, 'companionship') && ['高', '满', '爆'].includes(companionshipLevel)) {
+  if (['高', '满', '爆'].includes(companionshipLevel)) {
     reminders.push(odorLevel === '高' || odorLevel === '满' || odorLevel === '爆'
       ? `${female}渴望陪伴，但当前臭意会妨碍社交舒适度；清洁后再给予陪伴或安抚更有效`
       : `${female}渴望陪伴，可优先给予陪伴、交流或安抚`);
@@ -2895,32 +2588,11 @@ function applyExcreteMetabolism(chatState, args) {
   const profile = next.profile || {};
   const base = profile.base || {};
   const metabolism = profile.metabolism || {};
-  const notify = profile.notify || {};
   const immune = profile.immune || {};
   if (immune.metabolism) return { applied: false, message: `bsExcreteMetabolism skipped for ${female}: metabolism immune.` };
-  applyDerivedMetabolismExemptions(profile);
   applyMetabolismCapacityLimits(profile);
 
-  const isDerived = hasDerivedMetabolism(profile);
   const hasOptions = Object.keys(options).length > 0;
-  const wantsFluxRelease = isDerived && (!hasOptions || options.flux !== undefined);
-  if (wantsFluxRelease) {
-    const fluxCap = getMetabolismCap(profile, 'flux', Number(metabolism.flux) || 0);
-    const currentFlux = clampNumber(metabolism.flux, -fluxCap, fluxCap, 0);
-    const direction = getDerivedFluxDirection(currentFlux, 1);
-    const blockageRetention = getActiveBlockageRetention(profile, currentFlux > 0 ? 'fluxPositive' : 'fluxNegative', currentFlux);
-    const releasePower = applyRetention(options.flux !== undefined ? Math.max(0, Number(options.flux) || 0) : 40, blockageRetention);
-    metabolism.flux = clampNumber(currentFlux - (direction * releasePower), -fluxCap, fluxCap, currentFlux);
-    profile.metabolism = metabolism;
-    const nextFlux = clampNumber(metabolism.flux, -fluxCap, fluxCap, 0);
-    const didFlip = currentFlux !== 0 && Math.sign(currentFlux) !== Math.sign(nextFlux) && nextFlux !== 0;
-    profile.notify = {
-      ...notify,
-      secondly: didFlip
-        ? `${female}完成了一次${direction > 0 ? '正极' : '负极'}解放，需求强度被压过头，极性翻转为${nextFlux > 0 ? '正极' : '负极'}`
-        : `${female}完成了一次${direction > 0 ? '正极' : '负极'}解放，当前需求降为 ${Math.round(nextFlux)}`,
-    };
-  }
 
   const currentExcretion = clampNumber(metabolism.excretion, 0, getMetabolismCap(profile, 'excretion'), 0);
   const currentHunger = clampNumber(metabolism.hunger, 0, getMetabolismCap(profile, 'hunger'), 0);
@@ -2930,13 +2602,13 @@ function applyExcreteMetabolism(chatState, args) {
   const currentCompanionship = clampNumber(metabolism.companionship, 0, getMetabolismCap(profile, 'companionship'), 0);
 
   const optionReduction = (key, fallback = 0) => Math.max(0, options[key] !== undefined ? Number(options[key]) || 0 : fallback);
-  const useDefaults = !hasOptions && !isDerived;
-  const excretionReduction = isMetabolismExempt(profile, 'excretion') ? 0 : optionReduction('excretion', useDefaults ? 30 : 0);
-  const hungerReduction = isMetabolismExempt(profile, 'hunger') ? 0 : optionReduction('hunger', useDefaults ? 40 : 0);
-  const sleepReduction = isMetabolismExempt(profile, 'sleep') ? 0 : optionReduction('sleep', useDefaults ? 40 : 0);
-  const milkReduction = isMetabolismExempt(profile, 'milk') ? 0 : optionReduction('milk', useDefaults ? 30 : 0);
-  const odorReduction = isMetabolismExempt(profile, 'odor') ? 0 : optionReduction('odor');
-  const companionshipReduction = isMetabolismExempt(profile, 'companionship') ? 0 : optionReduction('companionship');
+  const useDefaults = !hasOptions;
+  const excretionReduction = optionReduction('excretion', useDefaults ? 30 : 0);
+  const hungerReduction = optionReduction('hunger', useDefaults ? 40 : 0);
+  const sleepReduction = optionReduction('sleep', useDefaults ? 40 : 0);
+  const milkReduction = optionReduction('milk', useDefaults ? 30 : 0);
+  const odorReduction = optionReduction('odor');
+  const companionshipReduction = optionReduction('companionship');
 
   const relievedExcretion = Math.min(currentExcretion, applyRetention(excretionReduction, getActiveBlockageRetention(profile, 'excretion')));
   const relievedHunger = Math.min(currentHunger, applyRetention(hungerReduction, getActiveBlockageRetention(profile, 'hunger')));
@@ -2952,8 +2624,8 @@ function applyExcreteMetabolism(chatState, args) {
   metabolism.hunger = Math.max(0, currentHunger - relievedHunger);
   metabolism.sleep = Math.max(0, currentSleep - relievedSleep);
   metabolism.milk = Math.max(0, currentMilk - relievedMilk);
-  metabolism.odor = isMetabolismExempt(profile, 'odor') ? 0 : remainingOdor;
-  metabolism.companionship = isMetabolismExempt(profile, 'companionship') ? 0 : Math.max(0, currentCompanionship - relievedCompanionship);
+  metabolism.odor = remainingOdor;
+  metabolism.companionship = Math.max(0, currentCompanionship - relievedCompanionship);
 
   addMetabolismValue(profile, 'excretion', relievedHunger * 0.5, 0, 150);
   addMetabolismValue(profile, 'sleep', relievedHunger * 0.1, 0, 150);
@@ -2969,7 +2641,14 @@ function applyExcreteMetabolism(chatState, args) {
   ]) {
     applyAccelerationRebound(profile, key, amount);
   }
-  applyDerivedMetabolismExemptions(profile);
+
+  // 哺乳判定：缓解乳意 ≥10 视为一次有效哺乳/排乳，重置断奶计时。
+  // 这是「用进废退」的供给端——规律哺乳的母亲泌乳持续、哺乳期不断。
+  if (relievedMilk >= 10) {
+    const lactationBase = profile.base || {};
+    lactationBase.daysSinceMilkRelief = 0;
+    profile.base = lactationBase;
+  }
 
   profile.metabolism = metabolism;
   updateAdvisoryNotify(profile, female);
@@ -3010,20 +2689,7 @@ function clearPregnancyState(profile) {
 
 function appendChildrenFromFetuses(profile, fetuses) {
   const children = Array.isArray(profile.children) ? profile.children.map((item) => ({ ...item })) : [];
-  const base = profile.base || {};
-  const motherDerivedType = base.derivedType ? String(base.derivedType) : null;
   for (const fetus of fetuses) {
-    const progress = clampNumber(fetus?.maternalDerivedTypeProgress, -100, 100, 0);
-    const fatherDerivedType = fetus?.fatherDerivedType ? String(fetus.fatherDerivedType) : null;
-    let childDerivedType = null;
-
-    if (progress > 75 && motherDerivedType) {
-      childDerivedType = motherDerivedType;
-    }
-    if (progress < -75 && fatherDerivedType) {
-      childDerivedType = fatherDerivedType;
-    }
-
     // 代孕／寄生：孩子不属于承载者，但先如实记下并标注 provider。
     // 之前是直接 continue 跳过，孩子记录会凭空消失——承载者不得、提供者也没有。
     // 之后由 transferProviderChildren 在拿得到 chatState 的层级转交给 provider。
@@ -3046,11 +2712,11 @@ function appendChildrenFromFetuses(profile, fetuses) {
       nestedInEmbryoId: Number.isFinite(Number(fetus?.nestedInEmbryoId)) ? Number(fetus.nestedInEmbryoId) : null,
       nestedInChildId: null,
       gender: String(fetus?.gender || '未知'),
-      race: String(fetus?.race || '未知'),
+      race: String(fetus?.race || '人类'),
       // 父系种族在胎儿上本来就有，此前分娩时被丢掉，血缘图便无从得知路人父亲的血统
       fatherRace: fetus?.fatherRace ? String(fetus.fatherRace) : null,
-      fatherDerivedType: fetus?.fatherDerivedType ? String(fetus.fatherDerivedType) : null,
-      derivedType: childDerivedType,
+      fatherDerivedType: null,
+      derivedType: null,
       age: 0,
       birthWeightRatio: clampNumber(fetus?.weight, 0.33, 3.0, 1.0),
       birthAffinity: clampNumber(fetus?.affinity, -50, 50, 0),
@@ -3139,6 +2805,9 @@ function applyChildbirthInternal(profile, female, isNatural) {
   if (runtime) restorePregnancyPhysiology(profile, runtime);
   base.stage = '产后恢复';
   base.days = 0;
+  // 活产才进入哺乳期：四个产后恢复写入口里只有分娩设这个标记，
+  // 流产/压流/清空没有孩子可哺，恢复完直接回卵泡期
+  base.pendingLactation = true;
   experience.naturalBirthExperience = clampNumber(experience.naturalBirthExperience, 0, 999, 0) + (isNatural ? 1 : 0);
   experience.surgicalBirthExperience = clampNumber(experience.surgicalBirthExperience, 0, 999, 0) + (isNatural ? 0 : 1);
   profile.experience = experience;
@@ -3820,34 +3489,17 @@ function applyImplantEmbryo(chatState, args) {
 
   const count = Math.max(1, Math.min(50, Math.floor(Number(args?.count) || 1)));
   const fathers = String(args?.fathers || '').trim() || '未知';
-  // provider 只负责归属；遗传资料来自 race/fatherRace 描述符。
-  // race 未提供时，已注册 provider 的状态仅作为兼容性预设，不依赖 provider 名称一定可解析。
-  const providerCharacter = chatState.characters?.[provider];
-  const explicitRace = String(args?.race || '').trim();
-  const providerRace = String(providerCharacter?.profile?.base?.race || '').trim();
-  const geneticDescriptor = explicitRace
-    ? parseRaceDescriptor(explicitRace)
-    : {
-      race: parseRaceDescriptor(providerRace || base.race || '人类').race || '人类',
-      derivedType: providerCharacter?.profile?.base?.derivedType
-        ? String(providerCharacter.profile.base.derivedType)
-        : null,
-    };
-  const geneticRace = geneticDescriptor.race || '人类';
-  const fatherRaceText = String(args?.fatherRace || '').trim();
-  const fatherDescriptor = parseRaceDescriptor(fatherRaceText || geneticRace);
-  const geneticProfile = { base: { race: geneticRace } };
+  // provider 只负责归属；种族锁死人类，race/fatherRace 参数仅作兼容，不再读取。
   const spermSeed = {
     male: fathers,
-    race: fatherDescriptor.race || geneticRace,
-    // 所有外部遗传衍生类型都占父系槽：fatherRace 明示者优先，否则退回卵源 race。
-    derivedType: fatherDescriptor.derivedType || geneticDescriptor.derivedType || null,
+    race: '人类',
+    derivedType: null,
   };
 
   const existingFetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
   ensureEmbryoMetadata(pregnant);
   for (let index = 0; index < count; index += 1) {
-    existingFetuses.push(createSimpleFetus(profile, spermSeed, currentStage, { geneticProfile, provider }));
+    existingFetuses.push(createSimpleFetus(profile, spermSeed, currentStage, { provider }));
   }
   pregnant.fetuses = existingFetuses;
   ensureEmbryoMetadata(pregnant);
@@ -4221,6 +3873,16 @@ function applyEggGain(profile, amount) {
     return { applied: false, usedCooldown: false };
   }
 
+  // 哺乳期闭经：催情/高潮也不排卵
+  if (stage === '哺乳期') {
+    return { applied: false, usedCooldown: false };
+  }
+
+  // 停经/围绝经期晚期/初潮前：卵巢功能已停或未启动，同样不排卵
+  if (stage === '停经' || stage === '围绝经期晚期' || stage === '无经期') {
+    return { applied: false, usedCooldown: false };
+  }
+
   if (stage === '排卵期') {
     base.eggs = clampNumber(base.eggs, 0, 999, 0) + nextAmount;
     base.uterinePressure = clampNumber(base.uterinePressure, 0, 999, 0) + 2;
@@ -4307,6 +3969,14 @@ function getMenstrualStageFluctuation(profile, stage) {
   if (vitalityLevel === 1) maxFluctuationRatio += 0.15;
   if (psyStressLevel === 6) maxFluctuationRatio += 0.08;
   if (psyStressLevel === 7) maxFluctuationRatio += 0.15;
+  // 围绝经期早期（仍在周期内）：周期变得不规律——停经前 5 年起抖动幅度
+  // 线性放大到最高 +45%（经期忽长忽短、忽前忽后）
+  const age = Number(base.age);
+  const menopauseAge = getMenopauseAge(profile);
+  if (Number.isFinite(age) && menopauseAge - 5 < age && age < menopauseAge) {
+    const progress = Math.min(1, (age - (menopauseAge - 5)) / 5);
+    maxFluctuationRatio += 0.45 * progress;
+  }
   if (maxFluctuationRatio <= 0) return 0;
 
   const seedText = `${stage}:${vitalityLevel}:${psyStressLevel}`;
@@ -4316,14 +3986,38 @@ function getMenstrualStageFluctuation(profile, stage) {
   return normalized * maxFluctuationRatio;
 }
 
-function getStageLimit(profile, stage) {
+export function getStageLimit(profile, stage) {
   if (MENSTRUAL_STAGE_DAYS[stage]) {
     const ratio = clampNumber(profile?.bio?.menstrualLengthRatio, 0.1, 20, 1);
     const fluctuation = getMenstrualStageFluctuation(profile, stage);
     return Math.max(1, MENSTRUAL_STAGE_DAYS[stage] * ratio * (1 + fluctuation));
   }
   if (stage === '产后恢复') return Math.max(1, clampNumber(profile?.bio?.recoveryDays, 1, 9999, 56));
+  if (stage === '哺乳期') return Math.max(1, clampNumber(profile?.bio?.lactationDays, 1, 9999, LACTATION_DEFAULT_DAYS));
+  if (stage === '围绝经期晚期') return PERIMENOPAUSE_LATE_STAGE_DAYS;
   return null;
+}
+
+/** 围绝经期晚期单次持续天数：紊乱周期的长度，平均比正常月经期长 */
+const PERIMENOPAUSE_LATE_STAGE_DAYS = 7;
+/** 进入围绝经期晚期的年龄门槛：停经年龄 - 3（默认 42） */
+function getPerimenopauseLateEntryAge(profile) {
+  return Math.max(getMenarcheAge(profile) + 1, getMenopauseAge(profile) - 3);
+}
+
+/**
+ * 围绝经期早期（仍处正常周期阶段时）的生育力因子。
+ * 从停经前 5 年开始线性衰退：入口 1.0 → 停经年龄归 0.05。
+ * 年轻角色恒 1。作用于 attemptFertilization 的 chanceFactor。
+ */
+function getPerimenopauseFertilityFactor(profile) {
+  const age = Number(profile?.base?.age);
+  if (!Number.isFinite(age)) return 1;
+  const menopauseAge = getMenopauseAge(profile);
+  const declineStart = menopauseAge - 5;
+  if (age <= declineStart) return 1;
+  const progress = Math.min(1, (age - declineStart) / 5);
+  return Math.max(0.05, 1 - progress * 0.95);
 }
 
 function advanceMenstrualStage(profile, stage, daysValue) {
@@ -4339,6 +4033,18 @@ function advanceMenstrualStage(profile, stage, daysValue) {
     nextStage = MENSTRUAL_STAGES[(stageIndex + 1) % MENSTRUAL_STAGES.length];
     if (nextStage === '卵泡期') enteredFollicular = true;
     changed = true;
+  }
+  // 更年期入口：周期推进到「新一轮月经期」时，年龄已过围绝经晚期门槛的角色
+  // 不再进入正常周期，而是转入紊乱的围绝经期晚期；到停经年龄则直接停经。
+  if (nextStage === '月经期') {
+    const age = Number(profile?.base?.age);
+    if (Number.isFinite(age) && age >= getMenopauseAge(profile)) {
+      nextStage = '停经';
+      nextDays = 0;
+    } else if (Number.isFinite(age) && age >= getPerimenopauseLateEntryAge(profile)) {
+      nextStage = '围绝经期晚期';
+      nextDays = 0;
+    }
   }
   return {
     stage: nextStage,
@@ -4413,7 +4119,6 @@ function applyTimeToCharacter(character, tick) {
     if (newWeek > oldWeek && isHere) {
       applyWeeklyNutrition(profile);
     }
-    updateDerivedTypeProgress(profile, tick);
     revealSuperfetationFetuses(profile, next.name, notify);
     const derived = derivePregnancyStageState(pregnant.effectivePregnantDays, 1);
     stage = derived.stage;
@@ -4441,10 +4146,19 @@ function applyTimeToCharacter(character, tick) {
     days += deltaDays;
     const recoveryDays = getStageLimit(profile, '产后恢复');
     if (days > recoveryDays) {
-      stage = '卵泡期';
-      days = 0;
-      stageChanged = true;
-      enteredFollicular = true;
+      // 活产走哺乳期（有孩子要哺）；流产/压流完直接回卵泡期
+      if (base.pendingLactation) {
+        stage = '哺乳期';
+        days = 0;
+        delete base.pendingLactation;
+        stageChanged = true;
+        notify.firstly = `${next.name}进入了哺乳期`;
+      } else {
+        stage = '卵泡期';
+        days = 0;
+        stageChanged = true;
+        enteredFollicular = true;
+      }
       pregnant.pregnantDays = 0;
       pregnant.effectivePregnantDays = 0;
       pregnant.laborHours = 0;
@@ -4453,6 +4167,30 @@ function applyTimeToCharacter(character, tick) {
       pregnant.laborFetusIndex = 0;
       pregnant.laborPain = 0;
       clearProdromalState(pregnant);
+      pregnant.fetuses = [];
+      pregnant.fetusesCount = 0;
+      pregnant.fetalEnergyDrain = 0;
+      base.fertilizationDays = 0;
+    }
+  } else if (stage === '哺乳期') {
+    // 用进废退：lactationDays 现在的语义是「断奶窗口」——
+    // 持续哺乳（乳意被定期缓解）会不断重置断奶计时，哺乳期永不结束；
+    // 只有连续 bio.lactationDays（默认 45 天）没有哺乳/排乳，身体才会退奶。
+    if (base.daysSinceMilkRelief === undefined) base.daysSinceMilkRelief = 0;
+    base.daysSinceMilkRelief = Math.max(0, Number(base.daysSinceMilkRelief) || 0) + deltaDays;
+    days += deltaDays;
+    // 哺乳期闭经：排卵与月经被抑制，详见 applyEggGain / allowsNaturalConception
+    const weaningWindow = getStageLimit(profile, '哺乳期');
+    if (Number(base.daysSinceMilkRelief) > weaningWindow) {
+      // 自然离乳：回卵泡期，周期重启；跨周结算会把已不属于哺乳期的 milk 清零
+      stage = '卵泡期';
+      days = 0;
+      stageChanged = true;
+      enteredFollicular = true;
+      delete base.pendingLactation;
+      delete base.daysSinceMilkRelief;
+      pregnant.pregnantDays = 0;
+      pregnant.effectivePregnantDays = 0;
       pregnant.fetuses = [];
       pregnant.fetusesCount = 0;
       pregnant.fetalEnergyDrain = 0;
@@ -4483,19 +4221,46 @@ function applyTimeToCharacter(character, tick) {
       applyWeeklyNutrition(profile);
     }
     if (isHere) applyHourlyPregnancyMetabolism(profile, tick, next.name);
-    updateDerivedTypeProgress(profile, tick);
     const laborChanged = processLabor(profile, tick, next.name);
     stage = String(base.stage || stage);
     days = clampNumber(base.days, 0, 9999, 0);
     stageChanged = stageChanged || laborChanged || stage !== oldStage;
   } else if (LABOR_STAGES.includes(stage)) {
     if (isHere) applyHourlyPregnancyMetabolism(profile, tick, next.name);
-    updateDerivedTypeProgress(profile, tick);
     const laborChanged = processLabor(profile, tick, next.name);
     stage = String(base.stage || stage);
     days = clampNumber(base.days, 0, 9999, 0);
     stageChanged = stageChanged || laborChanged || stage !== oldStage;
   } else if (stage === '无经期' || stage === '未激活') {
+    days += deltaDays;
+    // 初潮出口：注册时未到初潮的角色，到点转入卵泡期，周期从此开始。
+    // age 在本函数末尾才写入 base，这里用推进后的年龄判定（一次大跳跃也能触发）。
+    // 药物/体质性无经期的成年角色由 lifecycleReason='external' 区分，不被放行。
+    const ageAfterTick = (Number(base.age) || 0) + (deltaDays / 365);
+    if (stage === '无经期' && String(base.lifecycleReason || '') !== 'external' && ageAfterTick >= getMenarcheAge(profile) && ageAfterTick < getMenopauseAge(profile)) {
+      stage = '卵泡期';
+      days = 0;
+      stageChanged = true;
+      enteredFollicular = true;
+      notify.firstly = `${next.name}迎来了初潮，月经周期开始运转`;
+    }
+  } else if (stage === '围绝经期晚期') {
+    days += deltaDays;
+    // 围绝经期晚期：周期紊乱的过渡段。到停经年龄即永久停经；
+    // 未到点则在阶段上限后回月经期（紊乱周期还会再来）。
+    if (Number(base.age) >= getMenopauseAge(profile)) {
+      stage = '停经';
+      days = 0;
+      stageChanged = true;
+      notify.firstly = `${next.name}的月经彻底停止了`;
+    } else if (days > getStageLimit(profile, '围绝经期晚期')) {
+      stage = '月经期';
+      days = 0;
+      stageChanged = true;
+    }
+  } else if (stage === '停经') {
+    // 永久阶段：days 继续累计（展示「停经已多久」），不再转出。
+    // 唯一出口是 bsSetMenstrualPhases 的医学干预（ hormone 替代治疗等剧情）。
     days += deltaDays;
   } else {
     // 未知阶段。这里不会让角色卡死——applyTimeToCharacter 结尾一定会过
@@ -4686,7 +4451,6 @@ function applyCharacterStatus(chatState, args) {
     base.uterinePressure = clampNumber((base.uterinePressure || 0) + Number(options.uterinePressure || 0), 0, uterinePressureCap, base.uterinePressure || 0);
     applyAmnionDurabilityFromPressure(profile, base.uterinePressure, female);
   }
-  applyDerivedMetabolismExemptions(profile);
 
   next.profile.base = base;
   maybeTriggerOrgasmOvulation(next);
@@ -5186,8 +4950,6 @@ function applyUpdatePsychology(chatState, args) {
 function applyAddSperm(chatState, args) {
   const female = String(args?.female || '').trim();
   const male = String(args?.male || '').trim();
-  const parsedRace = parseRaceDescriptor(args?.race || '人类');
-  const race = parsedRace.race || '人类';
   const amount = Number(args?.amount || 0);
   const character = chatState.characters?.[female];
   if (!female || !character) return { applied: false, message: `bsAddSperm skipped: unknown character ${female || '(empty)'}.` };
@@ -5198,14 +4960,13 @@ function applyAddSperm(chatState, args) {
   const next = cloneValue(character);
   const base = next.profile?.base || {};
   const sperms = Array.isArray(base.sperms) ? base.sperms.map((item) => ({ ...item })) : [];
-  const maleDerivedType = parsedRace.derivedType || null;
   const existing = sperms.find((item) => String(item?.male || '') === male);
   if (existing) {
     existing.value = Math.max(0, clampNumber(existing.value, 0, 999999, 0) + amount);
-    existing.race = race;
-    existing.derivedType = maleDerivedType;
+    existing.race = '人类';
+    existing.derivedType = null;
   } else if (amount > 0) {
-    sperms.push({ male, race, derivedType: maleDerivedType, value: amount });
+    sperms.push({ male, race: '人类', derivedType: null, value: amount });
   }
   base.sperms = sperms.filter((item) => clampNumber(item?.value, 0, 999999, 0) > 0);
   base.latestSexDays = 0;
@@ -5265,9 +5026,20 @@ function applySetMenstrualPhases(chatState, args) {
   if (!female || !character) return { applied: false, message: `bsSetMenstrualPhases skipped: unknown character ${female || '(empty)'}.` };
   if (!stage) return { applied: false, message: 'bsSetMenstrualPhases skipped: empty stage.' };
 
-  const allowedStages = new Set([...MENSTRUAL_STAGES, '产后恢复', '假孕期']);
+  const allowedStages = new Set([...MENSTRUAL_STAGES, '产后恢复', '假孕期', '哺乳期']);
   if (!allowedStages.has(stage)) {
     return { applied: false, message: `bsSetMenstrualPhases skipped: invalid stage ${stage}.` };
+  }
+
+  // 永久阶段不可用本工具跳出：停经/围绝经期晚期是年龄的必然，不是「阶段切换」。
+  // 想写激素治疗重启周期之类的剧情，请直接改完整变量页的 bio.menopauseAge。
+  const protectedStage = String(character?.profile?.base?.stage || '');
+  const protectedStages = new Set(['停经', '围绝经期晚期']);
+  if (protectedStages.has(protectedStage) && stage !== protectedStage) {
+    return {
+      applied: false,
+      message: `bsSetMenstrualPhases skipped for ${female}: stage ${protectedStage} 是年龄决定的永久阶段，不能被药物/剧情强制切换。`,
+    };
   }
 
   const next = cloneValue(character);
@@ -5296,6 +5068,8 @@ function applySetMenstrualPhases(chatState, args) {
 
   base.stage = stage;
   base.days = 0;
+  // 强制跳阶段＝放弃哺乳计划（断奶）
+  delete base.pendingLactation;
   profile.base = base;
   if (stage === '卵泡期') {
     const metabolism = profile.metabolism || {};
@@ -5334,7 +5108,6 @@ function applySetMenstrualPhases(chatState, args) {
 function applyDebugInjectPregnancy(chatState, args) {
   const female = String(args?.female || '').trim();
   const fatherInput = String(args?.father || '').trim();
-  const raceInput = String(args?.race || '人类').trim();
   const fetusCount = clampNumber(args?.fetusCount, 1, 9, 1);
   const equivalentDays = clampNumber(args?.equivalentDays, 0, 300, 0);
   const genderInput = String(args?.genders || '').trim();
@@ -5371,13 +5144,6 @@ function applyDebugInjectPregnancy(chatState, args) {
     return { applied: false, message: `bsDebugInjectPregnancy skipped for ${female}: fathers count must be 1 or match fetusCount.` };
   }
 
-  const rawRaceList = raceInput
-    ? raceInput.split(',').map((item) => String(item || '').trim()).filter(Boolean)
-    : ['人类'];
-  if (rawRaceList.length > 1 && rawRaceList.length !== fetusCount) {
-    return { applied: false, message: `bsDebugInjectPregnancy skipped for ${female}: races count must be 1 or match fetusCount.` };
-  }
-
   const allowedGenderMap = {
     男: '男',
     女: '女',
@@ -5395,7 +5161,7 @@ function applyDebugInjectPregnancy(chatState, args) {
   for (let index = 0; index < fetusCount; index += 1) {
     const spermSeed = {
       male: rawFatherList.length === 0 ? '未知' : (rawFatherList.length === 1 ? rawFatherList[0] : rawFatherList[index]),
-      race: parseRaceDescriptor(rawRaceList.length === 1 ? rawRaceList[0] : rawRaceList[index]).race || '人类',
+      race: '人类',
       derivedType: null,
     };
     const fetus = createSimpleFetus(profile, spermSeed, equivalentDays === 0 ? currentStage : '孕早期');
