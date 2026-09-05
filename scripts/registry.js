@@ -823,13 +823,11 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄与 bio.gestationModifierMultiplier 自动换算有效妊娠天数。',
     '- pregnant.fetusesCount: 这次怀孕的怀胎数',
     '- pregnant.fetuses: 每个胎儿包含 fathers、provider、gender；也可填写 weight、tendencyAngle、affinity',
-    '- 胎儿可带 tags 标注特殊来历，只接受这几个：identical（同卵）、superfetation（异期复孕）、nested（孕中孕）、rebirth（胎内回归）。代孕不必标——给了 provider 就会自动识别。写不出对应支撑栏位的标签会被撤销，宁可不标也不要留一个指向虚空的关系。',
-    '- 嵌合体不必标 tags——给了 chimera 就会自动识别。chimera = { sourceCount: 融合前的受精卵数, fatherSources: [父方名字…], maternalSources: [遗传母方名字…], genderSources: [各来源的性别…] }；父方与母方名字加起来不足两个会被撤销，因为那不成其为嵌合。',
+    '- 胎儿可带 tags 标注特殊来历，只接受这几个：identical（同卵）、superfetation（异期复孕）、rebirth（胎内回归）。代孕不必标——给了 provider 就会自动识别。写不出对应支撑栏位的标签会被撤销，宁可不标也不要留一个指向虚空的关系。',
     '- identical：同卵的几胎都标上即可，系统会自动把它们归为同一组；只标一胎会被撤销。',
     '- superfetation：必须一并给 conceivedAtDays（这一胎受精时，母体已经怀了多少有效孕日），会被夹进这次妊娠的范围内。它比同腹其他胎儿晚受精、发育落后。',
-    '- nested：这一胎长在另一颗胎儿体内。除了 conceivedAtDays，还要给 nestedInIndex＝宿主在 fetuses 阵列里的下标（从 0 起算，不能指自己）。它的母亲是那颗胎儿，出生后承载者会同时生下女儿与外孙。',
     '- rebirth：一名已出生的角色回到子宫里成为这一胎，fathers 写那个人的名字（可以是 user）。适合「开场就已经在角色子宫里」的设定。产出后是全新个体，与原来那个人不是同一笔资料。',
-    '- revealed：这一胎角色本人知不知道。省略时系统按孕龄自动判定（异期复孕进孕中期才知道、孕中孕要到孕晚期）；想让角色暂时不知情就明确给 false。',
+    '- revealed：这一胎角色本人知不知道。省略时系统按孕龄自动判定（异期复孕进孕中期才知道）；想让角色暂时不知情就明确给 false。',
     '- provider: 代孕母方、寄生等提供者名称，正常情况下为 null',
     '- weight: 胎儿体重/发育量倍率，范围 0.33-3.0；不确定可省略，系统会补 1.0',
     '- tendencyAngle: 胎位/趋向角度，范围 0-360；不确定可省略，系统会随机补值。角度映射必须固定为：0/360=正常头位/正位，180=完全臀位/倒位，90或270=横位；不要把 180 写成头位',
@@ -1011,21 +1009,6 @@ function pickObjectFields(value, allowedFields) {
   return result;
 }
 
-/**
- * 嵌合体的三组来源阵列。空的来源等于没有嵌合——只留一个来源的嵌合体是自相矛盾的，
- * 与其留半套资料让族谱画出残缺的边，不如整个撤掉。
- */
-function sanitizeChimera(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const list = (input) => (Array.isArray(input) ? input.map((item) => String(item || '').trim()).filter(Boolean) : []);
-  const fatherSources = list(value.fatherSources);
-  const maternalSources = list(value.maternalSources);
-  const genderSources = list(value.genderSources);
-  if (fatherSources.length + maternalSources.length < 2) return undefined;
-  const sourceCount = Math.max(2, Math.floor(Number(value.sourceCount)) || Math.max(fatherSources.length, maternalSources.length, 2));
-  return { sourceCount, fatherSources, maternalSources, genderSources };
-}
-
 function sanitizeChildren(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -1035,18 +1018,10 @@ function sanitizeChildren(value) {
         name: item.name ?? item.babyName ?? null,
         fathers: item.fathers ?? null,
         provider: item.provider ?? null,
-        // 多母源/嵌合体的来源字段必须原样保留，否则手动转交会失去归属依据
+        // 多母源代孕的来源字段原样保留，否则手动转交会失去归属依据
         providerSources: Array.isArray(item.providerSources)
           ? [...item.providerSources]
           : (item.provider ? String(item.provider).split(/\s*[×Xx]\s*/).map((part) => part.trim()).filter(Boolean) : undefined),
-        chimera: item.chimera && typeof item.chimera === 'object' && !Array.isArray(item.chimera)
-          ? {
-            ...item.chimera,
-            fatherSources: Array.isArray(item.chimera.fatherSources) ? [...item.chimera.fatherSources] : item.chimera.fatherSources,
-            maternalSources: Array.isArray(item.chimera.maternalSources) ? [...item.chimera.maternalSources] : item.chimera.maternalSources,
-            genderSources: Array.isArray(item.chimera.genderSources) ? [...item.chimera.genderSources] : item.chimera.genderSources,
-          }
-          : undefined,
         gender: item.gender ?? null,
         race: item.race === null || item.race === undefined ? null : String(item.race),
         derivedType: null,
@@ -1089,17 +1064,14 @@ function sanitizePregnant(value) {
           fatherDerivedType: null,
           gender: item.gender ?? null,
           embryoType: item.embryoType ?? null,
-          // 嵌合体：多套来源无法从别处推导，模型不给就等于没有这回事
-          chimera: sanitizeChimera(item.chimera),
           weight: Number.isFinite(Number(item.weight)) ? clampNumber(item.weight, 0.33, 3.0, 1.0) : undefined,
           tendencyAngle: Number.isFinite(Number(item.tendencyAngle)) ? clampNumber(item.tendencyAngle, 0, 360, 0) : undefined,
           affinity: Number.isFinite(Number(item.affinity)) ? clampNumber(item.affinity, -50, 50, 0) : undefined,
-          // 特殊来历：让角色卡开场就能是同卵双胞胎、异期复孕、孕中孕或胎内回归。
+          // 特殊来历：让角色卡开场就能是同卵双胞胎、异期复孕或胎内回归。
           // 只放行目录内的标签，支撑栏位在 normalizeRegisteredFetusTags 里对齐。
           tags: sanitizeFetusTagList(item.tags),
           conceivedAtDays: Number.isFinite(Number(item.conceivedAtDays)) ? Number(item.conceivedAtDays) : undefined,
           identicalGroup: Number.isFinite(Number(item.identicalGroup)) ? Math.floor(Number(item.identicalGroup)) : undefined,
-          nestedInIndex: Number.isFinite(Number(item.nestedInIndex)) ? Math.floor(Number(item.nestedInIndex)) : undefined,
           revealed: item.revealed === undefined ? undefined : Boolean(item.revealed),
           talents: normalizeTalentList(item.talents ?? item.inheritedTalents),
         };
@@ -1147,16 +1119,14 @@ function getRegistryEmbryoTypeRecoveryCoefficient() {
  * 分两条路走，因为这几种来历需要的资料量差很多：
  * - 只需要一个名字的（胎内回归、代孕／托卵）走硬套：玩家填名字，程式直接写进结果，
  *   不依赖模型愿不愿意照做。
- * - 需要模型编出胎儿结构的（嵌合、同卵、异期复孕、孕中孕）走提示：勾了就往注册提示词里
+ * - 需要模型编出胎儿结构的（同卵、异期复孕）走提示：勾了就往注册提示词里
  *   加一段明确指示。玩家的勾选没办法凭空生出两个真实的血统来源，硬套只会造出假资料。
  *
  * 两条路最后都会流经 normalizeRegisteredFetusTags，所以不管走哪条都不会留下自相矛盾的状态。
  */
 export const SPECIAL_FETUS_HINTS = {
-  chimera: '这次妊娠里要有一颗嵌合体胎儿：两颗以上的受精卵在著床前融合成一个个体。请给它 chimera = { sourceCount, fatherSources, maternalSources, genderSources }，来源名字要取自角色卡里真实存在的人，父方与母方名字合计至少两个。',
   identical: '这次妊娠里要有一对同卵双胞胎：至少两颗胎儿都标上 tags: ["identical"]，两者的 fathers 必须一致。',
   superfetation: '这次妊娠里要有一颗异期复孕的胎儿：它在母体已经怀孕之后才受精。给它 tags: ["superfetation"] 与 conceivedAtDays（受精当下母体已怀的有效孕日，必须小于目前孕龄），它比同腹其他胎儿发育落后。',
-  nested: '这次妊娠里要有一颗孕中孕的胎儿：它长在另一颗胎儿体内。给它 tags: ["nested"]、conceivedAtDays，以及 nestedInIndex＝宿主在 fetuses 阵列里的下标。宿主本身必须是一颗正常胎儿。',
 };
 
 /** 勾选转成追加给模型的指示；没勾任何一项时回传空字串 */
@@ -1208,8 +1178,7 @@ export function applyRequestedSpecialFetus(result, request) {
  *
  * 让模型直接写 tags 是有意的——「开场就已经在角色子宫里」这类设定没有别的表达方式。
  * 代价是它可能写出自相矛盾的组合，所以这里逐项对齐：落单的同卵会被撤掉标签、
- * 指不到宿主的孕中孕会被撤掉标签、异期复孕的受精点会被夹进合法范围。
- * 宁可少一个标签，也不要留一个指向虚空的关系。
+ * 异期复孕的受精点会被夹进合法范围。宁可少一个标签，也不要留一个指向虚空的关系。
  */
 function normalizeRegisteredFetusTags(pregnant) {
   const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
@@ -1219,24 +1188,6 @@ function normalizeRegisteredFetusTags(pregnant) {
     if (!Number.isInteger(Number(fetus.embryoId)) || Number(fetus.embryoId) <= 0) fetus.embryoId = index + 1;
     fetus.tags = sanitizeFetusTagList(fetus.tags);
   });
-
-  // 孕中孕：模型给的是阵列索引（它写不出内部编号），换成宿主的 embryoId
-  for (const [index, fetus] of fetuses.entries()) {
-    const target = Number(fetus.nestedInIndex);
-    delete fetus.nestedInIndex;
-    const valid = Number.isInteger(target) && target >= 0 && target < fetuses.length && target !== index;
-    if (valid) fetus.nestedInEmbryoId = fetuses[target].embryoId;
-    if (!fetus.nestedInEmbryoId) fetus.tags = fetus.tags.filter((tag) => tag !== 'nested');
-  }
-  // 宿主自己也是被套的那颗时整条链不成立，一起撤掉
-  for (const fetus of fetuses) {
-    if (!fetus.nestedInEmbryoId) continue;
-    const host = fetuses.find((item) => item.embryoId === fetus.nestedInEmbryoId);
-    if (!host || host.nestedInEmbryoId) {
-      delete fetus.nestedInEmbryoId;
-      fetus.tags = fetus.tags.filter((tag) => tag !== 'nested');
-    }
-  }
 
   // 同卵：标了却没给组别时自动分同一组；组内只有自己的撤掉标签
   const lonely = fetuses.filter((fetus) => fetus.tags.includes('identical') && !fetus.identicalGroup);
@@ -1261,17 +1212,15 @@ function normalizeRegisteredFetusTags(pregnant) {
       fetus.tags = sanitizeFetusTagList([...fetus.tags, 'superfetation']);
     } else {
       delete fetus.conceivedAtDays;
-      fetus.tags = fetus.tags.filter((tag) => tag !== 'superfetation' && tag !== 'nested');
-      delete fetus.nestedInEmbryoId;
+      fetus.tags = fetus.tags.filter((tag) => tag !== 'superfetation');
     }
   }
 
-  // 模型没说藏不藏时，照运行期的规则判定：一般异期胎进孕中期揭晓，孕中孕要到孕晚期
+  // 模型没说藏不藏时，照运行期的规则判定：异期胎进孕中期揭晓
   for (const fetus of fetuses) {
     if (!fetus.conceivedAtDays) { delete fetus.revealed; continue; }
     if (fetus.revealed === undefined) {
-      const threshold = fetus.nestedInEmbryoId ? 189 : 84;
-      fetus.revealed = effectiveDays >= threshold;
+      fetus.revealed = effectiveDays >= 84;
     }
     if (!fetus.revealed) delete fetus.revealed;
   }

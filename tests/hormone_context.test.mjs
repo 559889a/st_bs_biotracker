@@ -21,7 +21,7 @@ function makeCharacter(name, stage, days = 0, extra = {}) {
     name,
     initialized: true,
     profile: {
-      base: { stage, days, isHere: true, ...extra.base },
+      base: { stage, days, age: 28, isHere: true, ...extra.base },
       pregnant: { effectivePregnantDays: 168, fetuses: [], ...extra.pregnant },
       metabolism: { milk: 30 },
       experience: { ...extra.experience },
@@ -214,4 +214,31 @@ test('性态度：desire 高 + 稳定关系 → 排卵期想被内射', () => {
   });
   assert.match(block, /高受孕意愿/);
   assert.match(block, /希望被内射/);
+});
+
+test('性态度：未成年或年龄未知的角色不生成性语境行', () => {
+  const block = buildHormoneContextBlock({
+    existing_state: {
+      少女: makeCharacter('少女', '排卵期', 0, {
+        experience: { latestSexPartner: '路人' },
+        base: { stage: '排卵期', days: 0, age: 15 },
+      }),
+      无年龄: {
+        name: '无年龄', initialized: true,
+        profile: {
+          base: { stage: '排卵期', days: 0, isHere: true },
+          pregnant: {}, metabolism: {}, experience: {},
+        },
+      },
+      成年: makeCharacter('成年', '排卵期', 0, {
+        experience: { latestSexPartner: '路人' },
+      }),
+    },
+  });
+  assert.match(block, /\[性与避孕态度\]/);
+  // 年龄闸门只作用于性态度段；激素进度行照常显示所有角色
+  const sexSection = block.split('[性与避孕态度]')[1] || '';
+  assert.doesNotMatch(sexSection, /少女/);
+  assert.doesNotMatch(sexSection, /无年龄/);
+  assert.match(sexSection, /成年：/);
 });

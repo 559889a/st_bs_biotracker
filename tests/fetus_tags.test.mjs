@@ -13,10 +13,11 @@ test('一般妊娠没有任何标签', () => {
   assert.deepEqual(tags, []);
 });
 
-test('嵌合体从 chimera 栏位推导，不需要落盘', () => {
-  const fetus = { fathers: '凯 × 无名旅人', chimera: { sourceCount: 2, maternalSources: ['艾拉'] } };
-  assert.ok(deriveFetusTags(fetus, { carrierName: '艾拉' }).includes('chimera'));
-  assert.deepEqual(fetus.tags, undefined, '推导标签不应写回资料');
+test('嵌合/孕中孕标签已随多父系功能移除：字段在也会被白名单丢弃', () => {
+  const tags = deriveFetusTags({ fathers: '凯', tags: ['chimera', 'nested', 'identical'] }, { carrierName: '艾拉' });
+  assert.ok(!tags.includes('chimera'));
+  assert.ok(!tags.includes('nested'));
+  assert.ok(tags.includes('identical'), '目录内标签照常保留');
 });
 
 test('代孕：遗传母方不是承载者', () => {
@@ -87,12 +88,15 @@ test('提示词只描述本轮出现过的标签', () => {
   assert.deepEqual(describeFetusTags(['not_a_real_tag']), []);
 });
 
-test('预留标签已在目录中，往后写入即可显示', () => {
+test('目录不再收录多父系标签；纯爱向标签齐全', () => {
   const ids = FETUS_TAG_CATALOG.map((tag) => tag.id);
-  for (const reserved of ['rebirth', 'superfetation', 'nested', 'androgenesis', 'gynogenesis']) {
-    assert.ok(ids.includes(reserved), `${reserved} 不在目录中`);
+  for (const kept of ['surrogacy', 'selfing', 'identical', 'rebirth', 'superfetation']) {
+    assert.ok(ids.includes(kept), `${kept} 应在目录中`);
   }
-  assert.deepEqual(getFetusTagLabels(['nested', 'rebirth']), ['孕中孕', '胎内回归']);
+  for (const removed of ['chimera', 'nested', 'androgenesis', 'gynogenesis']) {
+    assert.ok(!ids.includes(removed), `${removed} 已移除，不应在目录中`);
+  }
+  assert.deepEqual(getFetusTagLabels(['rebirth', 'superfetation']), ['胎内回归', '异期复孕']);
 });
 
 // ── 落盘路径：白名单式清洗只要漏列新栏位，标签就会静默消失，整个机制等于没做
@@ -180,11 +184,10 @@ const payloadWith = (fetuses) => ({
 test('特殊胎儿出现时，主线状态提示词会附上来历说明', () => {
   const prompt = buildMainFlowStatePrompt(payloadWith([
     { fathers: '甲', race: '人类' },
-    { fathers: '乙', race: '人类', conceivedAtDays: 60, revealed: true, nestedInEmbryoId: 1, tags: ['superfetation', 'nested'] },
+    { fathers: '乙', race: '人类', conceivedAtDays: 60, revealed: true, tags: ['superfetation'] },
   ]));
   assert.match(prompt, /本轮出现的特殊胎儿来历/);
   assert.match(prompt, /superfetation/);
-  assert.match(prompt, /nested/);
 });
 
 test('只有普通胎儿时主线提示词不多带一段', () => {
@@ -201,10 +204,8 @@ test('追踪器系统提示词同样只在标签出现时才解释', () => {
   assert.ok(!plain.includes('本轮出现的胎儿标签'));
 });
 
-test('孕中孕的说明讲的是被套的那一颗，不是宿主', () => {
-  const [line] = describeFetusTags(['nested']);
-  // 曾经写反成「这名胎儿自身也怀有胎儿」——那是在描述宿主，
-  // 但标签是打在长在别人体内的那一颗上
-  assert.match(line, /长在另一颗胎儿的体内/);
-  assert.ok(!/自身也怀有胎儿/.test(line));
+test('异期复孕的说明强调晚受精与发育落后', () => {
+  const [line] = describeFetusTags(['superfetation']);
+  assert.match(line, /晚受精/);
+  assert.match(line, /落后/);
 });

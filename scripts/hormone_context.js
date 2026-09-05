@@ -65,6 +65,9 @@ export function buildSexualAttitudeBlock(existingState) {
     const psychology = item?.profile?.psychology || {};
     const stage = String(base.stage || '').trim();
     const displayName = String(item?.name || name);
+    // 年龄闸门：性语境只对成年角色生成。年龄未知同样不放行——宁可漏一行，不给未成年角色挂性语境。
+    const age = Number(base.age);
+    if (!Number.isFinite(age) || age < 18) continue;
     const marriageMate = String(experience.marriageMate || '').trim();
     const emotionalMate = String(experience.emotionalMate || '').trim();
     const hasContraception = Boolean(psychology?.mens?.hasContraception);

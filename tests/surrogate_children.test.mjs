@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import * as state from '../scripts/state.js';
-import { applyToolCall, calculateChimeraFusionProbability } from '../scripts/tools.js';
+import { applyToolCall } from '../scripts/tools.js';
 
 function makeCharacter(name, fetuses = []) {
   return {
@@ -264,71 +264,7 @@ test('later embryo transfers join the existing fertilizationDays window without 
   assert.equal(profile.pregnant.fetuses.length, 2);
 });
 
-test('chimera fusion probability is the fixed human baseline', () => {
-  // 全人类输入下，原公式的种族/衍生/胚型因子全部坍缩为常量 5%
-  const baseA = { race: '人类', embryoType: '胎生' };
-  const baseB = { race: '人类', embryoType: '胎生' };
-  assert.equal(calculateChimeraFusionProbability(baseA, baseB), 5);
-  assert.equal(calculateChimeraFusionProbability(
-    { ...baseA, fatherDerivedType: '魔女' },
-    { ...baseB, fatherDerivedType: '魔女' },
-  ), 5);
-  assert.equal(calculateChimeraFusionProbability(baseA, { ...baseB, embryoType: '卵生' }), 5);
-});
-
-test('two early embryos can fuse across races and keep dual parents under the carrier', () => {
-  const chatState = state.createEmptyChatState();
-  chatState.characters['孕母'] = makeHost('孕母');
-  chatState.characters['母A'] = makeHost('母A', '獸耳族-兔');
-  chatState.characters['母B'] = makeHost('母B', '精靈-木');
-
-  applyToolCall(chatState, {
-    name: 'bsImplantEmbryo',
-    arguments: { female: '孕母', provider: '母A', fathers: '父A', race: '獸耳族-兔' },
-  });
-  applyToolCall(chatState, {
-    name: 'bsImplantEmbryo',
-    arguments: { female: '孕母', provider: '母B', fathers: '父B', race: '精靈-木' },
-  });
-  const before = chatState.characters['孕母'].profile.pregnant.fetuses;
-  before[0].gender = '男';
-  before[1].gender = '女';
-
-  const originalRandom = Math.random;
-  Math.random = () => 0;
-  try {
-    applyToolCall(chatState, { name: 'bsPassedTime', arguments: { day: 2 } });
-  } finally {
-    Math.random = originalRandom;
-  }
-
-  const profile = chatState.characters['孕母'].profile;
-  assert.equal(profile.pregnant.fetuses.length, 1);
-  const chimera = profile.pregnant.fetuses[0];
-  assert.equal(chimera.gender, '待定');
-  assert.equal(chimera.fathers, '父A × 父B');
-  assert.deepEqual(chimera.providerSources, ['母A', '母B']);
-  assert.equal(chimera.race, '人类');
-  assert.equal(chimera.chimera.sourceCount, 2);
-
-  Math.random = () => 0.99;
-  try {
-    applyToolCall(chatState, { name: 'bsPassedTime', arguments: { day: 5 } });
-  } finally {
-    Math.random = originalRandom;
-  }
-  const implanted = chatState.characters['孕母'].profile;
-  assert.equal(implanted.base.stage, '孕早期');
-  assert.equal(implanted.pregnant.fetuses[0].gender, '双', '异性嵌合体按 40/40/20 在着床时解析');
-
-  applyToolCall(chatState, { name: 'bsChildbirth', arguments: { female: '孕母' } });
-  assert.equal(childrenOf(chatState, '孕母').length, 1, '多母源孩子默认登记在孕母名下');
-  assert.equal(childrenOf(chatState, '母A').length, 0);
-  assert.equal(childrenOf(chatState, '母B').length, 0);
-  assert.deepEqual(childrenOf(chatState, '孕母')[0].providerSources, ['母A', '母B']);
-});
-
-test('a failed fusion pair is checked only once', () => {
+test('early embryos coexist without fusing: chimera has been removed', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['孕母'] = makeHost('孕母');
   applyToolCall(chatState, {
@@ -339,24 +275,20 @@ test('a failed fusion pair is checked only once', () => {
   });
 
   const originalRandom = Math.random;
-  Math.random = () => 0.999;
+  Math.random = () => 0;
   try {
     applyToolCall(chatState, { name: 'bsPassedTime', arguments: { day: 2 } });
   } finally {
     Math.random = originalRandom;
   }
+  // 嵌合已移除：两颗受精卵各自著床，不会融合
   const fetuses = chatState.characters['孕母'].profile.pregnant.fetuses;
-  assert.equal(fetuses.length, 2);
-  assert.deepEqual(fetuses[0].fusionCheckedWith, [fetuses[1].embryoId]);
-
-  Math.random = () => 0;
-  try {
-    applyToolCall(chatState, { name: 'bsPassedTime', arguments: { day: 1 } });
-  } finally {
-    Math.random = originalRandom;
+  assert.ok(fetuses.length >= 2, '两颗胚胎应各自存在，不再融合');
+  for (const fetus of fetuses) {
+    assert.equal(fetus.chimera, undefined, '不应产生 chimera 栏位');
   }
-  assert.equal(chatState.characters['孕母'].profile.pregnant.fetuses.length, 2, '同一对不可在下一天重抽');
 });
+
 test('the rupture tool is hidden until someone can actually rupture', async () => {
   const { getTrackerToolDefinitions } = await import('../scripts/tracker.js');
   const settings = { diaryRecentLimit: 0 };

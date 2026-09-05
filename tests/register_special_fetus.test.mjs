@@ -14,11 +14,14 @@ test('没勾任何一项时不追加提示词', () => {
 });
 
 test('名字与勾选都会转成给模型的指示', () => {
-  const notes = buildSpecialFetusNotes({ rebirth: '小明', surrogacy: 'B', hints: ['chimera', 'nested'] });
+  const notes = buildSpecialFetusNotes({ rebirth: '小明', surrogacy: 'B', hints: ['identical', 'superfetation'] });
   assert.match(notes, /小明/);
   assert.match(notes, /provider 写成「B」/);
-  assert.match(notes, /嵌合体/);
-  assert.match(notes, /nestedInIndex/);
+  assert.match(notes, /同卵双胞胎/);
+  assert.match(notes, /异期复孕/);
+  // 多父系勾选已移除：chimera/nested 不再产生任何指示
+  const removed = buildSpecialFetusNotes({ hints: ['chimera', 'nested'] });
+  assert.equal(removed, '');
 });
 
 test('未知的勾选被忽略', () => {
@@ -42,7 +45,7 @@ test('代孕硬套 provider，不动其它栏位', () => {
 
 test('只勾提示类的项目不会硬套任何东西', () => {
   const result = withFetus();
-  assert.equal(applyRequestedSpecialFetus(result, { hints: ['chimera'] }), false);
+  assert.equal(applyRequestedSpecialFetus(result, { hints: ['identical'] }), false);
   assert.equal(result.profile.pregnant.fetuses[0].tags, undefined);
 });
 

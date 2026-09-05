@@ -859,12 +859,10 @@ function describeMissingSpecialFetus(request, character) {
   if (request.rebirth && !has((item) => Array.isArray(item?.tags) && item.tags.includes('rebirth'))) missing.push('胎内回归');
   if (request.surrogacy && !has((item) => String(item?.provider || '').trim())) missing.push('代孕／托卵');
   const hintChecks = {
-    chimera: (item) => Boolean(item?.chimera),
     identical: (item) => Array.isArray(item?.tags) && item.tags.includes('identical'),
     superfetation: (item) => Array.isArray(item?.tags) && item.tags.includes('superfetation'),
-    nested: (item) => Array.isArray(item?.tags) && item.tags.includes('nested'),
   };
-  const hintLabels = { chimera: '嵌合体', identical: '同卵双胞胎', superfetation: '异期复孕', nested: '孕中孕' };
+  const hintLabels = { identical: '同卵双胞胎', superfetation: '异期复孕' };
   for (const key of Array.isArray(request.hints) ? request.hints : []) {
     if (hintChecks[key] && !has(hintChecks[key])) missing.push(hintLabels[key]);
   }
@@ -2873,10 +2871,6 @@ function renderTrackPregnancy(viewModel) {
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">父方姓名</span><span class="bs-bt-track-list-value">${escapeHtml(item?.fathers || '未知')}</span></div>
                 ${item?.provider
             ? `<div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">遗传母方</span><span class="bs-bt-track-list-value">${escapeHtml(item.provider)}</span></div>`
-            : ''
-          }
-                ${item?.chimera
-            ? `<div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">嵌合来源</span><span class="bs-bt-track-list-value">${escapeHtml(`${Number(item.chimera.sourceCount) || 2} 颗受精卵`)}</span></div>`
             : ''
           }
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">性别</span><span class="bs-bt-track-list-value">${escapeHtml(item?.gender || '未知')}</span></div>

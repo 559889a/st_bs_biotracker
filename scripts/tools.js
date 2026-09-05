@@ -344,7 +344,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsAddSperm',
-    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数，建议 10-30（残留每天自动衰减 10，即 1-3 天内自然消失）；给过大的值会让正文连续多日描写残留。扣除/排出精液请用 bsDrainSperm。',
+    description: '向单一角色体内加入精液，用于性交后留下受孕机会。amount 必须为正数，建议 10-30（残留每天自动衰减 10，即 1-3 天内自然消失）；给过大的值会让正文连续多日描写残留。体内同一时间只保留一名男性的精液——换了新对象会直接替换掉旧来源，不存在多人共存。扣除/排出精液请用 bsDrainSperm。',
     input_schema: {
       type: 'object',
       properties: {
@@ -1057,42 +1057,6 @@ const SUPERFETATION_CHANCE_FACTOR = 0.10;
 const SUPERFETATION_REVEAL_DAYS = SUPERFETATION_RAW_WINDOW_DAYS;
 
 /**
- * 孕中孕：异期受精的那一颗落进另一颗胎儿体内，成为胎中胎。
- *
- * 走的是同一条高潮排卵的异期受精路径，额外三个条件同时成立才会变成孕中孕。
- * 三个都是硬筛子，不必再加机率系数：
- *  - 视窗 8-12 周（有效孕日 56-84），比异期本身更窄
- *  - 宿主胎儿的胎重 >= 1.5。典型胎重 0.95，孕期受精上限 1.83，
- *    要父系种族支配度接近满才碰得到
- *  - 子宫内精液总量 > 100。bsAddSperm 建议单次 10-30、每天衰减 10，
- *    要短时间内多次性交才堆得起来
- */
-const NESTED_WINDOW_MIN_DAYS = 56;
-const NESTED_HOST_MIN_WEIGHT = 1.5;
-const NESTED_MIN_SPERM = 100;
-/** 揭晓时机比一般异期胎晚得多：要到孕晚期才看得到 */
-const NESTED_REVEAL_DAYS = SUPERFETATION_RAW_WINDOW_DAYS + (Number(PREGNANCY_STAGE_DAYS['孕中期']) || 105);
-
-/**
- * 挑一颗够大的胎儿当宿主：取最重的，同重时优先女胎。
- * 只挑已著床的——待著床的胚胎自己都还没安顿好。
- */
-function pickNestedHostFetus(profile) {
-  const candidates = getImplantedFetuses(profile)
-    .filter((fetus) => clampNumber(fetus?.weight, 0.33, 3.0, 1.0) >= NESTED_HOST_MIN_WEIGHT);
-  if (candidates.length === 0) return null;
-  return candidates.reduce((best, fetus) => {
-    const bestWeight = clampNumber(best?.weight, 0.33, 3.0, 1.0);
-    const weight = clampNumber(fetus?.weight, 0.33, 3.0, 1.0);
-    if (weight > bestWeight) return fetus;
-    if (weight < bestWeight) return best;
-    // 同重时优先女胎
-    if (fetus?.gender === '女' && best?.gender !== '女') return fetus;
-    return best;
-  });
-}
-
-/**
  * 受精视窗上限。不是整个孕早期——着床要花 getImplantationDays 个真实日，
  * 视窗末尾受精的胚胎会来不及着床就撞上孕中期的强制清除，形成一段
  * 「受精看似成功、实则注定作废」的死区。把视窗提前关闭，死区由构造上消失。
@@ -1200,123 +1164,6 @@ function ensureEmbryoMetadata(pregnant) {
   return fetuses;
 }
 
-function getFetusFatherSources(fetus) {
-  return uniqueNonEmptyStrings(
-    Array.isArray(fetus?.chimera?.fatherSources)
-      ? fetus.chimera.fatherSources
-      : String(fetus?.fathers || '').split(/\s*[×Xx]\s*/),
-  );
-}
-
-function getFetusMaternalSources(fetus, carrierName) {
-  if (Array.isArray(fetus?.providerSources) && fetus.providerSources.length > 0) {
-    return uniqueNonEmptyStrings(fetus.providerSources);
-  }
-  const provider = String(fetus?.provider || '').trim();
-  return uniqueNonEmptyStrings([provider || carrierName]);
-}
-
-/**
- * 嵌合（多父同期受精的胚胎融合）概率，单位 %。
- * 原版由双方种族的同卵率/受精难度/胚型与衍生类型推算；锁死人类后
- * 全部输入坍缩为常量：√(5×5) × 2/(1+√(1×1)) × 1 = 5。
- */
-export const CHIMERA_FUSION_BASE_PROBABILITY = 5;
-
-export function calculateChimeraFusionProbability() {
-  return CHIMERA_FUSION_BASE_PROBABILITY;
-}
-
-function createChimeraFetus(carrierName, fetusA, fetusB, embryoId) {
-  const fathers = uniqueNonEmptyStrings([...getFetusFatherSources(fetusA), ...getFetusFatherSources(fetusB)]);
-  const maternalSources = uniqueNonEmptyStrings([
-    ...getFetusMaternalSources(fetusA, carrierName),
-    ...getFetusMaternalSources(fetusB, carrierName),
-  ]);
-  const genderSources = [String(fetusA?.gender || '未知'), String(fetusB?.gender || '未知')];
-  const hasMale = genderSources.includes('男');
-  const hasFemale = genderSources.includes('女');
-  const gender = hasMale && hasFemale
-    ? '待定'
-    : (genderSources[0] === genderSources[1] ? genderSources[0] : (genderSources.includes('双') ? '双' : genderSources[0]));
-  const providerSources = maternalSources.length > 1
-    ? maternalSources
-    : maternalSources.filter((source) => source !== carrierName);
-  return {
-    embryoId,
-    fusionCheckedWith: [],
-    // 嵌合本身由 chimera 栏位推导，这里只承接两边已落盘的标签
-    tags: sanitizeFetusTagList([...(fetusA?.tags || []), ...(fetusB?.tags || [])]),
-    fathers: fathers.join(' × ') || '未知',
-    provider: providerSources.length === 0 ? null : providerSources.join(' × '),
-    providerSources,
-    race: '人类',
-    fatherRace: '人类',
-    gender,
-    embryoType: '胎生',
-    weight: (clampNumber(fetusA?.weight, 0.33, 3, 1) + clampNumber(fetusB?.weight, 0.33, 3, 1)) / 2,
-    tendencyAngle: randomInt(0, 360),
-    affinity: 0,
-    chimera: {
-      sourceCount: (Number(fetusA?.chimera?.sourceCount) || 1) + (Number(fetusB?.chimera?.sourceCount) || 1),
-      fatherSources: fathers,
-      maternalSources,
-      genderSources,
-    },
-  };
-}
-
-function applyChimeraFusion(profile, carrierName) {
-  const pregnant = profile.pregnant || {};
-  const fetuses = ensureEmbryoMetadata(pregnant);
-  if (clampNumber(profile?.base?.fertilizationDays, 0, 9999, 0) <= 1 || fetuses.length < 2) return;
-
-  // 待著床的异期胚胎不与已著床的胎儿配对：三个月大的胎儿与新受精卵融合说不通
-  const candidates = fetuses.filter((fetus) => !fetus?.chimera && !fetus?.pendingImplantation);
-  const pairs = [];
-  for (let left = 0; left < candidates.length; left += 1) {
-    for (let right = left + 1; right < candidates.length; right += 1) {
-      const fetusA = candidates[left];
-      const fetusB = candidates[right];
-      if (!fetusA.fusionCheckedWith.includes(fetusB.embryoId)
-        && !fetusB.fusionCheckedWith.includes(fetusA.embryoId)) {
-        pairs.push([fetusA, fetusB]);
-      }
-    }
-  }
-  shuffleInPlace(pairs);
-  const consumed = new Set();
-  const fused = [];
-  let nextId = getNextEmbryoId(fetuses);
-  for (const [fetusA, fetusB] of pairs) {
-    fetusA.fusionCheckedWith.push(fetusB.embryoId);
-    fetusB.fusionCheckedWith.push(fetusA.embryoId);
-    if (consumed.has(fetusA.embryoId) || consumed.has(fetusB.embryoId)) continue;
-    const probability = calculateChimeraFusionProbability(fetusA, fetusB);
-    if (probability > 0 && Math.random() < probability / 100) {
-      consumed.add(fetusA.embryoId);
-      consumed.add(fetusB.embryoId);
-      fused.push(createChimeraFetus(carrierName, fetusA, fetusB, nextId));
-      nextId += 1;
-    }
-  }
-  if (fused.length > 0) pregnant.fetuses = [...fetuses.filter((fetus) => !consumed.has(fetus.embryoId)), ...fused];
-  pregnant.fetusesCount = pregnant.fetuses.length;
-}
-
-function resolvePendingChimeraGenders(fetuses) {
-  for (const fetus of fetuses) {
-    if (fetus?.gender !== '待定') continue;
-    const roll = Math.random();
-    fetus.gender = roll < 0.4 ? '男' : roll < 0.8 ? '女' : '双';
-  }
-}
-
-/**
- * @param batch 只对这一批胚胎掷分裂骰；省略＝全部。
- *   异期复孕时新胚胎著床会再跑一次这个函式，不限定批次的话，
- *   已经三个月大的先来那胎会被重新掷一次分裂骰，可能凭空变成双胞胎。
- */
 function applyIdenticalSplit(profile, batch = null) {
   const pregnant = profile.pregnant || {};
   const fetuses = ensureEmbryoMetadata(pregnant);
@@ -1759,19 +1606,10 @@ function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceF
     if (winner) {
       pregnant.fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
       const fetus = createSimpleFetus(profile, winner, stage);
-      // 孕中孕：异期受精成立之后，再看三个额外条件同时成不成立
-      const conceivedAt = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0);
-      const nestedHost = superfetation
-        && conceivedAt >= NESTED_WINDOW_MIN_DAYS
-        && totalSperm > NESTED_MIN_SPERM
-        ? pickNestedHostFetus(profile)
-        : null;
-      if (nestedHost) markNestedFetus(profile, fetus, nestedHost);
-      else if (superfetation) markSuperfetationFetus(profile, fetus);
+      // 孕期受精 = 异期复孕：记下受精当下的共用时钟、待著床、按落后进度打折
+      if (superfetation) markSuperfetationFetus(profile, fetus);
       pregnant.fetuses.push(fetus);
-      notify.secondly = nestedHost
-        ? `${name}体内的一胎之中又结出了新的受精卵`
-        : (superfetation ? `${name}在妊娠中再度受精` : `${name}受精成功`);
+      notify.secondly = superfetation ? `${name}在妊娠中再度受精` : `${name}受精成功`;
       eggs -= 1;
     }
     break;
@@ -1816,8 +1654,7 @@ function revealSuperfetationFetuses(profile, name, notify, { force = false } = {
   let revealed = 0;
   for (const fetus of fetuses) {
     if (!fetus?.conceivedAtDays || fetus.revealed || fetus.pendingImplantation) continue;
-    // 孕中孕藏得比一般异期胎久：要到孕晚期才看得到
-    const threshold = fetus.nestedInEmbryoId ? NESTED_REVEAL_DAYS : SUPERFETATION_REVEAL_DAYS;
+    const threshold = SUPERFETATION_REVEAL_DAYS;
     if (!force && shared < threshold) continue;
     fetus.revealed = true;
     revealed += 1;
@@ -1867,19 +1704,8 @@ function processSuperfetationImplantation(profile, tick, notify, name) {
 
   for (const fetus of pending) delete fetus.pendingImplantation;
   applyIdenticalSplit(profile, pending);
-  resolvePendingChimeraGenders(pending);
   pregnant.fetusesCount = Array.isArray(pregnant.fetuses) ? pregnant.fetuses.length : 0;
   updateFetalEnergyDrain(profile);
-}
-
-/**
- * 把新胚胎标成孕中孕：母方是宿主胎儿（用 embryoId 指过去，出生后再解析成孩子 id），
- * 父方照常是精源。它同时也是异期胎，所以两个标签都带。
- */
-function markNestedFetus(profile, fetus, host) {
-  markSuperfetationFetus(profile, fetus);
-  fetus.nestedInEmbryoId = host.embryoId;
-  fetus.tags = sanitizeFetusTagList([...(fetus.tags || []), 'nested']);
 }
 
 function processSimpleConception(profile, tick, notify, name) {
@@ -1934,9 +1760,6 @@ function processSimpleConception(profile, tick, notify, name) {
   if (hasPreimplantationEmbryos) {
     ensureEmbryoMetadata(pregnant);
     base.fertilizationDays = clampNumber(base.fertilizationDays, 0, 9999, 0) + deltaDays;
-    const beforeFusionCount = pregnant.fetuses.length;
-    applyChimeraFusion(profile, name);
-    if (pregnant.fetuses.length < beforeFusionCount) notify.secondly = `${name}的早期受精卵发生了融合`;
     if (base.fertilizationDays >= getImplantationDays(profile)) {
       const vitality = clampNumber(base.vitality, 0, 200, 100);
       const implantationFailChance = vitality < 100 ? (100 - vitality) / 100 : 0;
@@ -1952,7 +1775,6 @@ function processSimpleConception(profile, tick, notify, name) {
         // 产后恢复期可再孕：新妊娠＝断奶， pendingLactation 就地作废
         delete base.pendingLactation;
         applyIdenticalSplit(profile);
-        resolvePendingChimeraGenders(pregnant.fetuses);
         base.stage = '孕早期';
         base.days = 0;
         base.fertilizationDays = 0;
@@ -4959,6 +4781,8 @@ function applyAddSperm(chatState, args) {
 
   const next = cloneValue(character);
   const base = next.profile?.base || {};
+  // 单人独占：体内只保留一名男性的精液。换了新对象 = 旧的被彻底冲刷/排出，
+  // 不存在多人共存与竞争受孕。同一名男性则照常累加。
   const sperms = Array.isArray(base.sperms) ? base.sperms.map((item) => ({ ...item })) : [];
   const existing = sperms.find((item) => String(item?.male || '') === male);
   if (existing) {
@@ -4966,6 +4790,7 @@ function applyAddSperm(chatState, args) {
     existing.race = '人类';
     existing.derivedType = null;
   } else if (amount > 0) {
+    sperms.length = 0;
     sperms.push({ male, race: '人类', derivedType: null, value: amount });
   }
   base.sperms = sperms.filter((item) => clampNumber(item?.value, 0, 999999, 0) > 0);

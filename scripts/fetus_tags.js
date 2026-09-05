@@ -2,11 +2,13 @@
  * 胎儿标签：给一颗胎儿标注「它是怎么来的／它现在处于什么特殊状态」。
  *
  * 分两类来源，合并后去重：
- * 1. 可从既有栏位推导的（嵌合体、代孕、自交）——不落盘。存量存档不需要迁移就能显示，
+ * 1. 可从既有栏位推导的（代孕、自交）——不落盘。存量存档不需要迁移就能显示，
  *    也不会出现「资料改了但标签还留着旧的」这种两份真相打架的情况。
- * 2. 推导不出来的（同卵分裂，以及往后的胎内回归、异期复孕、孕中孕、雄雌核发生）
+ * 2. 推导不出来的（同卵分裂，以及往后的胎内回归、异期复孕）
  *    ——写进 fetus.tags 落盘。这些事件的证据在发生当下就消失了：同卵分裂产生的复制体
  *    和原胚在栏位上完全一样，事后无从分辨；未来那几项则根本没有对应栏位。
+ *
+ * 多父系功能（嵌合体、孕中孕）已随纯爱化改造移除，目录不再收录这两个标签。
  *
  * 本模块是纯资料层，不依赖引擎也不依赖宿主 API。
  */
@@ -17,12 +19,6 @@
  * 没用到的标签不占 token。
  */
 export const FETUS_TAG_CATALOG = [
-  {
-    id: 'chimera',
-    label: '嵌合体',
-    derived: true,
-    short: '两颗以上的受精卵在著床前融合成了一个个体，所以它身上同时带有多套血统与性别来源。',
-  },
   {
     id: 'surrogacy',
     label: '代孕',
@@ -40,8 +36,6 @@ export const FETUS_TAG_CATALOG = [
     label: '同卵',
     short: '著床时由同一颗受精卵分裂而来；带同一个 identicalGroup 的几胎基因一致。',
   },
-  // ── 以下为预留：目前没有任何流程会产生，栏位与语义先定下来，
-  //    等对应玩法实作时直接往 fetus.tags 里写 id 即可，不必再改资料结构。
   {
     id: 'rebirth',
     label: '胎内回归',
@@ -51,21 +45,6 @@ export const FETUS_TAG_CATALOG = [
     id: 'superfetation',
     label: '异期复孕',
     short: '母体已经怀孕时又受精而成的一胎——孕早期里没用掉的排卵留到了那时。它比同腹其他胎儿晚受精，孕龄与发育都落后一截，出生时通常明显更小，但仍与先来那胎一起娩出。',
-  },
-  {
-    id: 'nested',
-    label: '孕中孕',
-    short: '它长在另一颗胎儿的体内（nestedInEmbryoId 指向作为宿主的那一胎）。它的母亲就是那颗胎儿本身、父亲是精液来源，所以承载者这一胎次会同时生下女儿与外孙；两者一起娩出。',
-  },
-  {
-    id: 'androgenesis',
-    label: '雄核发生',
-    short: '细胞核只来自父方，母方仅提供卵细胞质与孕育环境。',
-  },
-  {
-    id: 'gynogenesis',
-    label: '雌核发生',
-    short: '细胞核只来自母方，精子仅触发发育而不提供遗传物质。',
   },
 ];
 
@@ -98,16 +77,13 @@ function splitSources(value) {
     .filter(Boolean);
 }
 
-/** 遗传母方名单：优先取 providerSources，再退到 provider，最后是嵌合体的母源 */
+/** 遗传母方名单：优先取 providerSources，再退到 provider，最后是承载者本人 */
 function maternalNames(fetus, carrierName) {
   if (Array.isArray(fetus?.providerSources) && fetus.providerSources.length > 0) {
     return fetus.providerSources.map((item) => String(item || '').trim()).filter(Boolean);
   }
   const provider = String(fetus?.provider || '').trim();
   if (provider) return splitSources(provider);
-  if (Array.isArray(fetus?.chimera?.maternalSources) && fetus.chimera.maternalSources.length > 0) {
-    return fetus.chimera.maternalSources.map((item) => String(item || '').trim()).filter(Boolean);
-  }
   const carrier = String(carrierName || '').trim();
   return carrier ? [carrier] : [];
 }
@@ -120,8 +96,6 @@ export function deriveFetusTags(fetus, { carrierName = '' } = {}) {
   if (!fetus || typeof fetus !== 'object') return [];
   const found = new Set(sanitizeFetusTagList(fetus.tags));
   const carrier = String(carrierName || '').trim();
-
-  if (fetus.chimera) found.add('chimera');
 
   const mothers = maternalNames(fetus, carrier);
   if (carrier && mothers.some((name) => name && name !== carrier)) found.add('surrogacy');
