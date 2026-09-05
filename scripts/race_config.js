@@ -5,7 +5,7 @@
  * 字段仅作展示，恒为「人类」。
  *
  * genderRatio 不放这里：它不能落进 bio（注册白名单与 bio 默认值均无此项），
- * 胎儿性别在 deriveFetusGender 里直接用 50/50。
+ * 胎儿性别直接 50/50。
  */
 export const HUMAN_PHYSIOLOGY = Object.freeze({
   menstrualLengthRatio: 1,
@@ -14,7 +14,6 @@ export const HUMAN_PHYSIOLOGY = Object.freeze({
   breedTolerance: 1,
   impregnationDifficulty: 1,
   orgasmOvulationAmount: 1,
-  identicalProbability: 5,
   recoveryDays: 56,
 });
 

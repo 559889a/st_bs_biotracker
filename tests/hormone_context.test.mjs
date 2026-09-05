@@ -41,7 +41,6 @@ test('目录覆盖所有阶段常量与特殊阶段（完整性）', () => {
     ...LABOR_STAGES,
     '产后恢复',
     '哺乳期',
-    '假孕期',
     '围绝经期早期',
     '围绝经期晚期',
     '停经',
@@ -73,7 +72,6 @@ test('formatStageProgress：各阶段格式', () => {
   assert.equal(formatStageProgress({ base: { stage: '哺乳期', days: 40 } }), '哺乳期 第41天');
   assert.equal(formatStageProgress({ base: { stage: '围绝经期晚期', days: 3 } }), '围绝经期晚期 第4天');
   assert.equal(formatStageProgress({ base: { stage: '停经', days: 200 } }), '停经 200天（周期永久停止）');
-  assert.equal(formatStageProgress({ base: { stage: '假孕期', days: 20 } }), '假孕期 第21天');
   assert.equal(formatStageProgress({ base: { stage: '第一产程' }, pregnant: { laborPhase: '活跃期' } }), '第一产程（活跃期）');
 });
 

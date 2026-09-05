@@ -2,8 +2,7 @@
  * 激素周期画像层：阶段 → 情绪/行为暗示的纯派生投影。
  *
  * 设计：不做任何持久化——所有内容从 base.stage / base.days / bio 实时推算，
- * 随 tracker 每轮处理完消息自动重建，与 fetus_tags.js 的「只解释当轮出现的
- * 标签」同一套 token 纪律：只描述在场角色当前所处的阶段。
+ * 随 tracker 每轮处理完消息自动重建，同一套 token 纪律：只描述在场角色当前所处的阶段。
  *
  * 个体差异不加敏感度旋钮：psy 三轴、vitality/psyStress 等级与角色卡本身
  * 已提供方差（设计决定，见计划）。
@@ -34,7 +33,6 @@ export const HORMONE_PHASE_CATALOG = Object.freeze({
   第三产程: '娩出后的骤然轻松与虚脱并存；如释重负，随即被对婴儿的急切关注接管。',
   产后恢复: '恶露虚脱、激素断崖式下跌：情绪跌宕（产后抑郁窗口），同时母爱开始萌发；夜间哺乳疲惫与被需要感交织。',
   哺乳期: '泌乳素主导：母爱外溢、哺乳时的亲密与安宁、对婴儿高度专注；情绪温柔而敏感，涨奶不排会烦躁。',
-  假孕期: '孕激素欺骗：腹部隆起感、恶心嗜睡等「假象孕吐」、筑巢行为；情绪如孕早期般敏感多变。',
   围绝经期早期: '围绝经期开始（仍在周期内但走向终点）：周期忽长忽短、经量忽多忽少；潮热夜汗说来就来——半夜热醒掀被、白天突然一股燥热从胸口涌到脸。睡眠破碎、易怒与低落交替，性欲波动大；受孕能力已明显衰退但仍非绝对为零。',
   围绝经期晚期: '围绝经期晚期（周期已紊乱）：月经越来越稀、间隔越来越长，也许几个月才来一次，也许这次就是最后一次；潮热夜汗达到顶峰，情绪如坐过山车，阴道干涩初现；对「还能不能怀孕」的答案越来越接近「不能」，对衰老与自由的感受同时涌来。',
   停经: '停经（绝经后）：卵巢功能落幕，月经永久停止，自然受孕可能归零。潮热夜汗在停经头几年仍会袭来，随后逐年减轻；阴道干涩与润滑变慢是常态，需要更长的前戏与耐心；雌激素退场后雄激素相对占上风——部分女性迎来「第二春」，欲望更直接、更不为生育所困。身体进入不再被周期摆动的平稳与自由。',
@@ -85,8 +83,6 @@ export function buildSexualAttitudeBlock(existingState) {
       riskLine = '排卵期，受孕概率最高的窗口';
     } else if (MENSTRUAL_STAGES.includes(stage) || stage === '产后恢复') {
       riskLine = '周期内但非排卵窗口，受孕概率较低（非零）';
-    } else if (stage === '假孕期') {
-      riskLine = '假孕期，不会真实受孕';
     } else if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage) || stage === '产兆前驱') {
       riskLine = '妊娠中';
     }
@@ -181,7 +177,6 @@ export function formatStageProgress(profile = {}) {
   }
   if (stage === '围绝经期晚期') return `${stage} 第${Math.floor(days) + 1}天`;
   if (stage === '停经') return `停经 ${Math.floor(days)}天（周期永久停止）`;
-  if (stage === '假孕期') return `${stage} 第${Math.floor(days) + 1}天`;
   if (LABOR_STAGES.includes(stage)) {
     const phase = String(pregnant.laborPhase || '').trim();
     return phase ? `${stage}（${phase}）` : stage;
@@ -199,7 +194,6 @@ const SYMPTOM_GLOSS = Object.freeze({
     hunger: '阻塞·饿意＝孕吐恶心、消化不良',
     sleep: '阻塞·困意＝失眠',
     milk: '阻塞·乳意＝乳房胀痛敏感',
-    odor: '阻塞·臭意＝分泌物增生',
     companionship: '阻塞·伴意＝社交回避',
   },
   acceleration: {
@@ -207,7 +201,6 @@ const SYMPTOM_GLOSS = Object.freeze({
     hunger: '快积·饿意＝容易饿、奇特饮食偏好',
     sleep: '快积·困意＝晕眩嗜睡',
     milk: '快积·乳意＝乳意快升、溢乳',
-    odor: '快积·臭意＝体温升高、容易排汗',
     companionship: '快积·伴意＝黏人',
   },
   expansion: {
@@ -215,7 +208,6 @@ const SYMPTOM_GLOSS = Object.freeze({
     hunger: '扩容·饿意＝养分母体优先',
     milk: '扩容·乳意＝胸部沉重饱满',
     sleep: '扩容·困意＝激素使精力旺盛（代偿）',
-    odor: '扩容·臭意＝孕妇香气',
     companionship: '扩容·伴意＝胎儿内在陪伴感',
   },
 });

@@ -40,7 +40,6 @@ import {
   saveSettings,
   worldbookSelectionMatches,
 } from './state.js';
-import { sanitizeFetusTagList } from './fetus_tags.js';
 import { canLoadHostWorldInfo, getHostWorldBook, loadHostWorldInfo } from './host.js';
 import {
   normalizeNextSkillId,
@@ -358,7 +357,7 @@ export function buildBreedingInferenceSystemPrompt(settings, options = {}) {
     targetName ? `本次唯一目标是「${targetName}」。target_character 必须逐字填写「${targetName}」，不得填写 user、角色卡名或任何其他角色。` : '',
     '繁育推演描述的是较稳定的人格、经历、认知与关系倾向，不是当下短暂情绪；不要因为角色刚害羞、刚哭、刚受伤就大幅改写长期心理轴。',
     '若资料能支持判断，必须给出数值；只有完全没有线索时才使用 null。',
-    '如果角色当前未怀孕或没有明确初登场怀孕迹象，填写 mens；如果角色当前已怀孕、假孕、产兆前驱或产程中，填写 preg。mens 与 preg 二选一，另一项用 null。',
+    '如果角色当前未怀孕或没有明确初登场怀孕迹象，填写 mens；如果角色当前已怀孕、产兆前驱或产程中，填写 preg。mens 与 preg 二选一，另一项用 null。',
     '启用 mens 时，必须同时推演 isChaste 与 hasContraception；启用 preg 时，必须同时推演 knowsFatherSource 与 hasProfessionalPrenatalCare。',
     '数值范围为 0-100。0 是极端封闭/否认/失控，50 是普通中性，100 是极端掌控/执迷/展现。不要使用 100+，注册阶段只给 0-100 起始点。',
     sourceChild ? '本次角色来源为已出生孩子。payload.source_child 是其固定出生资料与既有天赋；必须用来判断长期人格、母子关系及成长背景，不得改写其天赋。' : '',
@@ -771,7 +770,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- base.uterinePressure: 初始宫压。非妊娠上限50；妊娠後会随进度平滑提升，臨產期上限达150。【危险警告】孕早期与孕中期前期上限极低，超过15便极易触发流产警告！除非开局正在临盆或剧烈腹痛，否则强烈建议填 0。',
     '- base.latestSexDays: 距最近一次性行为经过的天数。若 experience.latestSexPartner 有意义，建议一并填写；若已超过最近一月经周期或无从判断，可为 null。',
     '- base.sperms: 体内残留精液来源列表。适用于刚性交结束、仍有精液残留的开局；每项包含 male、value，value 建议 10-30（每天自动衰减 10）。',
-    '- metabolism: 初始需求状态。上限皆为150，包含 excretion、hunger、sleep、milk、odor、companionship，分别表示泄意、饿意、困意、乳意、臭意、伴意；excretion（泄意）同时包含排尿与排便需求；milk 在普通周期表示乳房胀敏或周期不适，在妊娠、假孕或产后恢复阶段也可表示泌乳需求。',
+    '- metabolism: 初始需求状态。上限皆为150，包含 excretion、hunger、sleep、milk、companionship，分别表示泄意、饿意、困意、乳意、伴意；excretion（泄意）同时包含排尿与排便需求；milk 在普通周期表示乳房胀敏或周期不适，在妊娠或产后恢复阶段也可表示泌乳需求。',
     '- pregnant.nutrition 是妊娠供养力盈余/赤字，专注参与胎儿体重/供养结算，不作为 metabolism 排解阻塞来源。',
     '注意：vitalityLevel 与 psyStressLevel 是角色内在特质等级，不根据当前疲劳、刚哭过、当下崩溃等暂时状态调整。',
     '注意：base.vitality 与 base.psyStress 不由你直接填写，系统会根据 vitalityLevel 与 psyStressLevel 自动计算初始值。',
@@ -820,30 +819,15 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '【5. 初登场即怀孕】',
     '参数说明：',
     '- pregnant.pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/等价周期起点计算的孕周天数；若资料写“孕8周/怀孕8周”填 56，若明确写“受孕后8周/胚胎发育8周”，需再加上等价排卵前偏移。',
-    '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄与 bio.gestationModifierMultiplier 自动换算有效妊娠天数。',
+    '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄自动换算有效妊娠天数。',
     '- pregnant.fetusesCount: 这次怀孕的怀胎数',
     '- pregnant.fetuses: 每个胎儿包含 fathers、gender；也可填写 weight、tendencyAngle、affinity',
-    '- 胎儿可带 tags 标注特殊来历，只接受这几个：identical（同卵）、superfetation（异期复孕）。写不出对应支撑栏位的标签会被撤销，宁可不标也不要留一个指向虚空的关系。',
-    '- identical：同卵的几胎都标上即可，系统会自动把它们归为同一组；只标一胎会被撤销。',
-    '- superfetation：必须一并给 conceivedAtDays（这一胎受精时，母体已经怀了多少有效孕日），会被夹进这次妊娠的范围内。它比同腹其他胎儿晚受精、发育落后。',
-    '- revealed：这一胎角色本人知不知道。省略时系统按孕龄自动判定（异期复孕进孕中期才知道）；想让角色暂时不知情就明确给 false。',
     '- weight: 胎儿体重/发育量倍率，范围 0.33-3.0；不确定可省略，系统会补 1.0',
     '- tendencyAngle: 胎位/趋向角度，范围 0-360；不确定可省略，系统会随机补值。角度映射必须固定为：0/360=正常头位/正位，180=完全臀位/倒位，90或270=横位；不要把 180 写成头位',
     '- affinity: 胎儿对母体的亲和/排斥倾向，范围 -50 到 50；正值亲和，负值排斥，不确定可省略',
     '示例：',
     '- 人类怀单胎8周，正常头位示例: {"pregnant":{"pregnantDays":56,"fetusesCount":1,"fetuses":[{"fathers":"丈夫","gender":"男","weight":1.0,"tendencyAngle":0,"affinity":10}]}}',
     '- 怀双胎20周: {"pregnant":{"pregnantDays":140,"fetusesCount":2,"fetuses":[{"fathers":"丈夫","gender":"女"},{"fathers":"丈夫","gender":"女"}]}}',
-    '【5.1 妊娠變速类补充设定（仅在存在特殊变速效果时填写 bio）】',
-    '参数说明：',
-    '- bio.gestationModifierMultiplier: 特殊妊娠速度修正倍率。大于 1 为加速，小于 1 为减速，0 为冻结；初始怀孕仍只填 pregnant.pregnantDays（孕龄），系统会用倍率换算 effectivePregnantDays。',
-    '- bio.gestationModifierName: 该倍率效果的名称，例如祝福、诅咒、体质、术式。',
-    '- bio.gestationModifierDescription: 对该倍率来源与表现的简短说明。',
-    '- 这组 bio 字段是可选的特殊效果，不是一般妊娠的必填资料。普通孕妇、常规妊娠都不要填写。',
-    '- 禁止用 bio 填写 gestationModifierMultiplier=1 的默认占位内容，例如「常规妊娠」「标准人类妊娠生理周期」；没有特殊变速效果就整个省略 bio。',
-    '- 仅当资料明确存在持续生效且倍率不为 1 的祝福、诅咒、体质、术式、冻结或延长效果时填写；未怀孕角色也可保留此类明确效果。',
-    '示例：',
-    '- 被祝福的冒险者妊娠加快: {"bio":{"gestationModifierMultiplier":1.5,"gestationModifierName":"丰饶祝福","gestationModifierDescription":"受女神祝福后，妊娠期间胎儿发育明显加快，孕期反应也会更早显现。"}}',
-    '- 红尘之力导致孕期极端延长，即使当前未怀孕也应保留: {"bio":{"gestationModifierMultiplier":0.001,"gestationModifierName":"红尘织命","gestationModifierDescription":"受红尘之力影响，若进入妊娠，孕期推进速度仅为常规人类的千分之一，整体妊娠期会被极度拉长。"}}',
     '【6. 文字描述栏位】',
     '参数说明：descriptions 包含 normalDescription、pregnantDescription。',
     'normalDescription 与 pregnantDescription 必须使用旧版格式：字段名|描述内容;;字段名|描述内容;;...字段名|描述内容;;。',
@@ -858,7 +842,6 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     `【${includeBreedingPsychology ? 7 : 6}. 角色补充设定】`,
     customNotes ? customNotes : '无',
     '若提供了角色补充设定，必须优先视为该角色已明确声明的特征，并在推演、注册与备装相关字段中如实体现；不要忽略，也不要擅自扩写超出原意的内容。',
-    '若角色补充设定明确描述的是一种未来也会持续生效、且倍率不为 1 的妊娠体质、祝福、诅咒、冻结或延长效果，即使角色当前未怀孕，也必须写入 bio.gestationModifierMultiplier、bio.gestationModifierName、bio.gestationModifierDescription；普通妊娠不得补写 bio。',
     '注意：未怀孕角色不要硬填 pregnantDescription；描述内容应遵守旧系统文字栏位语义，不要换行。',
     '只输出 JSON，不要输出额外解释。',
     '【name】必须原样填写 payload.target_character，一字不差。那是用户指定要注册的角色名；即使它与角色卡名不同，也不得改用角色卡名、别名或称谓。',
@@ -937,7 +920,6 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '      "hunger": 0,',
     '      "sleep": 0,',
     '      "milk": 0,',
-    '      "odor": 0,',
     '      "companionship": 0',
     '    },',
     '    "children": [],',
@@ -977,7 +959,7 @@ const EXPERIENCE_FIELDS = [
 ];
 
 const DESCRIPTION_FIELDS = ['normalDescription', 'pregnantDescription'];
-const METABOLISM_FIELDS = ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship', 'flux'];
+const METABOLISM_FIELDS = ['excretion', 'hunger', 'sleep', 'milk', 'companionship'];
 
 function clampNumber(value, min, max, fallback = 0) {
   const next = Number(value);
@@ -1057,12 +1039,7 @@ function sanitizePregnant(value) {
           weight: Number.isFinite(Number(item.weight)) ? clampNumber(item.weight, 0.33, 3.0, 1.0) : undefined,
           tendencyAngle: Number.isFinite(Number(item.tendencyAngle)) ? clampNumber(item.tendencyAngle, 0, 360, 0) : undefined,
           affinity: Number.isFinite(Number(item.affinity)) ? clampNumber(item.affinity, -50, 50, 0) : undefined,
-          // 特殊来历：让角色卡开场就能是同卵双胞胎或异期复孕。
           // 只放行目录内的标签，支撑栏位在 normalizeRegisteredFetusTags 里对齐。
-          tags: sanitizeFetusTagList(item.tags),
-          conceivedAtDays: Number.isFinite(Number(item.conceivedAtDays)) ? Number(item.conceivedAtDays) : undefined,
-          identicalGroup: Number.isFinite(Number(item.identicalGroup)) ? Math.floor(Number(item.identicalGroup)) : undefined,
-          revealed: item.revealed === undefined ? undefined : Boolean(item.revealed),
           talents: normalizeTalentList(item.talents ?? item.inheritedTalents),
         };
       })
@@ -1071,19 +1048,6 @@ function sanitizePregnant(value) {
     pregnantDays: Number.isFinite(Number(value.pregnantDays)) ? Number(value.pregnantDays) : 0,
     fetusesCount: Number.isFinite(Number(value.fetusesCount)) ? Number(value.fetusesCount) : fetuses.length,
     fetuses,
-  };
-}
-
-function sanitizeRegistryBio(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const multiplier = Number(value.gestationModifierMultiplier);
-  if (!Number.isFinite(multiplier)) return null;
-  const normalizedMultiplier = clampNumber(multiplier, 0, 20, 1);
-  if (Math.abs(normalizedMultiplier - 1) <= 0.000001) return null;
-  return {
-    gestationModifierMultiplier: normalizedMultiplier,
-    gestationModifierName: value.gestationModifierName === null ? '' : String(value.gestationModifierName || '').trim(),
-    gestationModifierDescription: value.gestationModifierDescription === null ? '' : String(value.gestationModifierDescription || '').trim(),
   };
 }
 
@@ -1101,87 +1065,6 @@ function sanitizeDiaryEntries(value) {
 /** 胎生恢复系数；其余胚型随种族系统移除，恒为 0.2。 */
 function getRegistryEmbryoTypeRecoveryCoefficient() {
   return 0.2;
-}
-
-/**
- * 把注册时给的特殊胎儿标签整理成自洽状态。
- *
- * 让模型直接写 tags 是有意的——「开场就已经是异期双胎」这类设定没有别的表达方式。
- * 代价是它可能写出自相矛盾的组合，所以这里逐项对齐：落单的同卵会被撤掉标签、
- * 异期复孕的受精点会被夹进合法范围。宁可少一个标签，也不要留一个指向虚空的关系。
- */
-function normalizeRegisteredFetusTags(pregnant) {
-  const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
-  if (fetuses.length === 0) return;
-
-  fetuses.forEach((fetus, index) => {
-    if (!Number.isInteger(Number(fetus.embryoId)) || Number(fetus.embryoId) <= 0) fetus.embryoId = index + 1;
-    fetus.tags = sanitizeFetusTagList(fetus.tags);
-  });
-
-  // 同卵：标了却没给组别时自动分同一组；组内只有自己的撤掉标签
-  const lonely = fetuses.filter((fetus) => fetus.tags.includes('identical') && !fetus.identicalGroup);
-  if (lonely.length >= 2) for (const fetus of lonely) fetus.identicalGroup = lonely[0].embryoId;
-  for (const fetus of fetuses) {
-    const group = Number(fetus.identicalGroup);
-    const mates = group ? fetuses.filter((item) => Number(item.identicalGroup) === group) : [];
-    if (mates.length >= 2) {
-      if (!fetus.tags.includes('identical')) fetus.tags = sanitizeFetusTagList([...fetus.tags, 'identical']);
-    } else {
-      delete fetus.identicalGroup;
-      fetus.tags = fetus.tags.filter((tag) => tag !== 'identical');
-    }
-  }
-
-  // 异期复孕：受精点必须落在这次妊娠之内，且与标签互相对齐
-  const effectiveDays = Math.max(0, Number(pregnant.effectivePregnantDays) || 0);
-  for (const fetus of fetuses) {
-    const conceivedAt = Number(fetus.conceivedAtDays);
-    if (Number.isFinite(conceivedAt) && conceivedAt > 0) {
-      fetus.conceivedAtDays = Math.min(Math.max(conceivedAt, 0), Math.max(effectiveDays - 1, 0));
-      fetus.tags = sanitizeFetusTagList([...fetus.tags, 'superfetation']);
-    } else {
-      delete fetus.conceivedAtDays;
-      fetus.tags = fetus.tags.filter((tag) => tag !== 'superfetation');
-    }
-  }
-
-  // 模型没说藏不藏时，照运行期的规则判定：异期胎进孕中期揭晓
-  for (const fetus of fetuses) {
-    if (!fetus.conceivedAtDays) { delete fetus.revealed; continue; }
-    if (fetus.revealed === undefined) {
-      fetus.revealed = effectiveDays >= 84;
-    }
-    if (!fetus.revealed) delete fetus.revealed;
-  }
-
-  for (const fetus of fetuses) if (fetus.tags.length === 0) delete fetus.tags;
-}
-
-/**
- * 玩家在注册页勾选的特殊胎儿来历。
- *
- * 全部走提示：勾了就往注册提示词里加一段明确指示，由模型编出对应的胎儿结构。
- * （原版的胎内回归/代孕「硬套」路径已随纯爱化改造移除。）
- *
- * 结果最后会流经 normalizeRegisteredFetusTags，不会留下自相矛盾的状态。
- */
-export const SPECIAL_FETUS_HINTS = {
-  identical: '这次妊娠里要有一对同卵双胞胎：至少两颗胎儿都标上 tags: ["identical"]，两者的 fathers 必须一致。',
-  superfetation: '这次妊娠里要有一颗异期复孕的胎儿：它在母体已经怀孕之后才受精。给它 tags: ["superfetation"] 与 conceivedAtDays（受精当下母体已怀的有效孕日，必须小于目前孕龄），它比同腹其他胎儿发育落后。',
-};
-
-/** 勾选转成追加给模型的指示；没勾任何一项时回传空字串 */
-export function buildSpecialFetusNotes(request) {
-  if (!request || typeof request !== 'object') return '';
-  const lines = [];
-  for (const key of Array.isArray(request.hints) ? request.hints : []) {
-    if (SPECIAL_FETUS_HINTS[key]) lines.push(SPECIAL_FETUS_HINTS[key]);
-  }
-  if (lines.length === 0) return '';
-  return ['【特殊胎儿来历】使用者已指定以下设定，请务必在 pregnant.fetuses 里实现：']
-    .concat(lines.map((line) => '- ' + line))
-    .join('\n');
 }
 
 function normalizeRegisteredPregnancy(profile) {
@@ -1207,14 +1090,12 @@ function normalizeRegisteredPregnancy(profile) {
   pregnant.amnionDurability = 100;
   // 必须排在 effectivePregnantDays 算出来之后：受精点要夹进这次妊娠的范围，
   // 揭晓与否也要拿它跟门槛比
-  normalizeRegisteredFetusTags(pregnant);
 
   const bio = profile.bio || {};
   const motherBreedTolerance = clampNumber(bio.breedTolerance, 0.1, 100, 1.0);
   pregnant.fetalEnergyDrain = pregnant.fetuses.reduce((sum, fetus) => {
     const weight = clampNumber(fetus?.weight, 0.33, 3.0, 1.0);
-    // 与运行期一致：异期胎用自己的孕龄，不按先来者的进度算负担
-    const ownAge = Math.max(0, pregnant.effectivePregnantDays - (Number(fetus?.conceivedAtDays) || 0));
+    const ownAge = pregnant.effectivePregnantDays;
     const ageInDays = ownAge * weight;
     const fetalAgeWeeks = ageInDays / 7;
     const fetalLoad = fetalAgeWeeks / 40;
@@ -1310,9 +1191,7 @@ function sanitizeRegistryProfile(profile, baseProfile) {
   if (Object.keys(metabolism).length > 0) {
     const nextMetabolism = {};
     for (const [key, value] of Object.entries(metabolism)) {
-      const meter = key === 'flux'
-        ? sanitizeMeter(value, { min: -150, max: 150 })
-        : sanitizeMeter(value, { min: 0, max: 150 });
+      const meter = sanitizeMeter(value, { min: 0, max: 150 });
       if (meter !== null) nextMetabolism[key] = meter;
     }
     if (Object.keys(nextMetabolism).length > 0) sanitized.metabolism = nextMetabolism;
@@ -1327,10 +1206,6 @@ function sanitizeRegistryProfile(profile, baseProfile) {
 
   if (profile.pregnant !== undefined) sanitized.pregnant = sanitizePregnant(profile.pregnant);
 
-  if (profile.bio !== undefined) {
-    const bio = sanitizeRegistryBio(profile.bio);
-    if (bio) sanitized.bio = bio;
-  }
 
   if (profile.diary !== undefined) sanitized.diary = sanitizeDiaryEntries(profile.diary);
 
@@ -1728,10 +1603,10 @@ export async function runRegistry(ctx, options = {}) {
   const settings = getSettings(ctx);
   const chatState = getChatState(ctx, settings);
   const targetName = resolveRegistryTargetName(ctx, options.targetName);
-  // 玩家勾的特殊来历分两半：需要模型编出胎儿结构的走提示词，只需要名字的在结果回来后硬套
-  const specialFetus = options.specialFetus || null;
+
+
   const baseNotes = String(options.customNotes !== undefined ? options.customNotes : (settings.registryCustomNotes || '')).trim();
-  const customNotes = [baseNotes, buildSpecialFetusNotes(specialFetus)].filter(Boolean).join('\n\n');
+  const customNotes = baseNotes;
   if (!targetName) throw new Error('runRegistry 需要 targetName');
   const requestedSource = options.sourceChild || null;
   const sourceChildContext = requestedSource ? resolveRegistryChildSource(chatState, requestedSource) : null;

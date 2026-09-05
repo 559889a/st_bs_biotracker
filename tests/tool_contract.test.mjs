@@ -49,12 +49,12 @@ test('bsSetCharacterPresence 的 isPresent：schema 与实作一致要求必填'
 
 test('bsSetMenstrualPhases 说明列出的阶段，正好就是实作接受的阶段', () => {
   const description = toolOf('bsSetMenstrualPhases').description;
-  const accepted = ['卵泡期', '排卵期', '黄体期', '月经期', '产后恢复', '假孕期'];
+  const accepted = ['卵泡期', '排卵期', '黄体期', '月经期', '产后恢复', '哺乳期'];
   for (const stage of accepted) {
     assert.match(description, new RegExp(stage), `说明没提到 ${stage}`);
     assert.equal(call(one(), 'bsSetMenstrualPhases', { female: 'A', stage }).applied, true, `${stage} 该被接受`);
   }
-  for (const stage of ['孕早期', '回归期', '第一产程']) {
+  for (const stage of ['孕早期', '假孕期', '第一产程']) {
     assert.equal(call(one(), 'bsSetMenstrualPhases', { female: 'A', stage }).applied, false, `${stage} 该被拒绝`);
   }
 });

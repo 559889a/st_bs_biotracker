@@ -106,7 +106,7 @@ export const DEFAULT_SYSTEM_PROMPT = [
   '剧情中出现穿上、脱下、更衣、借穿、被脱除、淋湿更换、洗浴后重新着装等衣着变化时，必须用 bsChangeOutfit 同步当前穿着；只更新衣着描述文字而不换装是错误的。角色获得新长期衣物用 bsAddWardrobeItem，永久失去衣物用 bsRemoveWardrobeItem。',
   '性交留精用 bsAddSperm；排出残留精液用 bsDrainSperm；缓解生理需求用 bsExcreteMetabolism。',
   '跨日、重大事件或 notify 提醒时，可用 bsWriteDiary 为角色追加主观日记。',
-  '月经阶段、排卵期、假孕期切换用 bsSetMenstrualPhases；不要用它覆盖正在进行的受精、真妊娠或产程。',
+  '月经阶段切换用 bsSetMenstrualPhases；不要用它覆盖正在进行的受精、真妊娠或产程。',
   '流产用 bsAbortion；立即结束分娩用 bsChildbirth；角色在场状态变化用 bsSetCharacterPresence，参数必须为 female 和 isPresent（布尔值 true/false，不要使用 isHere）。角色明确回到当前场景、重新同行或参与当前互动时应设为 true；明确离开、失联或转为幕外时才设为 false。',
   '母胎互动用 bsMaternalFetalInteraction；每名角色在每个新小时内仅允许一次成功的母胎互动变化，重复调用会被跳过。direction=fetal 时须传 change，表示胎儿对母体的亲近或排斥并改变 affinity，不补充营养。direction=maternal 时不传 change，表示母体安抚胎儿，系统随机判定 affinity 变化；若成功且有待安抚不适，小幅变化补回 1 点营养，大幅变化补回 2 点营养。若处于产兆前驱则表示分娩抵抗。',
   '不要编造怀孕天数、胎数、流产、分娩或其他高影响事件。',
@@ -416,7 +416,7 @@ export function normalizeCharacterPsychologyState(characterState) {
   }
   if (metabolism && typeof metabolism === 'object' && !Array.isArray(metabolism)) {
     const expansionKey = String(pregnant?.expansion?.key || '');
-    for (const key of ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship']) {
+    for (const key of ['excretion', 'hunger', 'sleep', 'milk', 'companionship']) {
       if (metabolism[key] === undefined) continue;
       metabolism[key] = sanitizeNumber(metabolism[key], { min: 0, max: expansionKey === key ? 200 : 150 }) ?? 0;
     }
@@ -533,21 +533,10 @@ export function getGestationSpeciesSpeed(profile) {
   return 1;
 }
 
-export function getGestationModifierMultiplier(profile) {
-  const multiplier = Number(profile?.bio?.gestationModifierMultiplier);
-  if (Number.isFinite(multiplier) && multiplier >= 0) return Math.max(0, Math.min(20, multiplier));
-  return 1;
-}
-
 export function getGestationEffectiveSpeed(profile) {
-  const hasSpeciesSpeed = Number.isFinite(Number(profile?.bio?.gestationSpeciesSpeed));
-  const hasModifierMultiplier = Number.isFinite(Number(profile?.bio?.gestationModifierMultiplier));
-  if (hasSpeciesSpeed || hasModifierMultiplier) {
-    return Math.max(0, Math.min(20, getGestationSpeciesSpeed(profile) * getGestationModifierMultiplier(profile)));
-  }
-  const effectiveSpeed = Number(profile?.bio?.gestationEffectiveSpeed);
-  if (Number.isFinite(effectiveSpeed) && effectiveSpeed >= 0) return Math.max(0, Math.min(20, effectiveSpeed));
-  return 1;
+  // 妊娠变速已移除：有效速度就是种族速度（人类恒 1.0），旧存档的
+  // gestationEffectiveSpeed 字段不再作为输入。
+  return getGestationSpeciesSpeed(profile);
 }
 
 export function syncCharacterStageFromProfile(characterState) {
@@ -596,7 +585,6 @@ export function syncCharacterStageFromProfile(characterState) {
 
   if (
     MENSTRUAL_STAGES.includes(currentStage)
-    || currentStage === '假孕期'
     || currentStage === '产兆前驱'
     || currentStage === '产后恢复'
     || currentStage === '哺乳期'
@@ -800,14 +788,9 @@ export function createDefaultFemaleState(name = '') {
         menstrualLengthRatio: 1.0,
         gestationSpeciesSpeed: 1.0,
         gestationEffectiveSpeed: 1.0,
-        gestationModifierMultiplier: 1.0,
-        gestationModifierName: '',
-        gestationModifierDescription: '',
         birthDifficulty: 1.0,
         breedTolerance: 1.0,
         impregnationDifficulty: 1.0,
-        orgasmOvulationAmount: 1,
-        identicalProbability: 5,
         recoveryDays: 56,
         lactationDays: 45,
         menarcheAge: 12,
@@ -818,7 +801,6 @@ export function createDefaultFemaleState(name = '') {
         hunger: 0,
         sleep: 0,
         milk: 0,
-        odor: 0,
         companionship: 0,
         flux: 0,
       },
@@ -1630,14 +1612,9 @@ function createSnapshotCharacterBaseline(name = '') {
         menstrualLengthRatio: 1.0,
         gestationSpeciesSpeed: 1.0,
         gestationEffectiveSpeed: 1.0,
-        gestationModifierMultiplier: 1.0,
-        gestationModifierName: '',
-        gestationModifierDescription: '',
         birthDifficulty: 1.0,
         breedTolerance: 1.0,
         impregnationDifficulty: 1.0,
-        orgasmOvulationAmount: 1,
-        identicalProbability: 5,
         recoveryDays: 56,
         lactationDays: 45,
         menarcheAge: 12,
@@ -1649,7 +1626,6 @@ function createSnapshotCharacterBaseline(name = '') {
         sleep: 0,
         flux: 0,
         milk: 0,
-        odor: 0,
         companionship: 0,
       },
       descriptions: {

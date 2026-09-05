@@ -1,4 +1,3 @@
-import { sanitizeFetusTagList } from './fetus_tags.js';
 import {
   cloneValue,
   createChildId,
@@ -6,7 +5,6 @@ import {
   derivePregnancyStageState,
   getGestationEffectiveSpeed,
   getGestationSpeciesSpeed,
-  getGestationModifierMultiplier,
   getChatState,
   getMenarcheAge,
   getMenopauseAge,
@@ -94,7 +92,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsUpdateCharacterStatus',
-    description: '对单一角色的活力、情压、性欲、宫压做增减更新。会联动代谢累积、高潮排卵、羊膜耐久警告等状态。'
+    description: '对单一角色的活力、情压、性欲、宫压做增减更新。会联动代谢累积、羊膜耐久警告等状态。'
       + '四个数值传入的都是「变化量(delta)」而不是目标值：当前 vitality=80 传 -10 会变成 70，不是设为 -10。'
       + '结果会被夹在该角色的上限内，上限随其 vitalityLevel／psyStressLevel 与妊娠状态而不同，可从 existing_state 的 *_interpret 与上限文字判断，不必自行计算。',
     input_schema: {
@@ -303,7 +301,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsUpdatePsychology',
-    description: '按当前阶段更新单一角色的心理倾向数值。月经阶段使用 mens，妊娠/假孕/产兆前驱/产程使用 preg。系统会自动重算 *_interpret。每名角色在每个新小时内最多成功更新一次；在 bsPassedTime 推进满下一小时之前，重复调用会被跳过。注意：数值字段传入的是“变化量(delta)”而不是目标值，例如当前 stance_value=78，传入 {"preg":{"stance":2}} 会变成 80，而不是设为 2。建议一次只调整一个心理项，且尽量小幅变动；单次以 ±1 到 ±3 为宜，±5 已属于偏大变化。布林字段则是直接设为 true/false。',
+    description: '按当前阶段更新单一角色的心理倾向数值。月经阶段使用 mens，妊娠/产兆前驱/产程使用 preg。系统会自动重算 *_interpret。每名角色在每个新小时内最多成功更新一次；在 bsPassedTime 推进满下一小时之前，重复调用会被跳过。注意：数值字段传入的是“变化量(delta)”而不是目标值，例如当前 stance_value=78，传入 {"preg":{"stance":2}} 会变成 80，而不是设为 2。建议一次只调整一个心理项，且尽量小幅变动；单次以 ±1 到 ±3 为宜，±5 已属于偏大变化。布林字段则是直接设为 true/false。',
     input_schema: {
       type: 'object',
       properties: {
@@ -371,9 +369,9 @@ export const TOOL_DEFINITIONS = Object.freeze([
   {
     name: 'bsSetMenstrualPhases',
     description: '直接设置月经相关阶段，用于催情、药物、外力或剧情推进。'
-      + 'stage 只接受这几个值：卵泡期、排卵期、黄体期、月经期、产后恢复、假孕期、哺乳期；其他值（含妊娠阶段、围绝经期晚期与停经）一律拒绝。'
+      + 'stage 只接受这几个值：卵泡期、排卵期、黄体期、月经期、产后恢复、哺乳期；其他值（含妊娠阶段、围绝经期晚期与停经）一律拒绝。'
       + '停经与围绝经期晚期是年龄决定的永久阶段，无法用本工具切出——若剧情需要重启周期（激素治疗等），请由用户在完整变量页调整 bio.menopauseAge。'
-      + '切到排卵期时会重新允许高潮排卵；假孕期与哺乳期可留精但不会排卵或受孕（哺乳期闭经）；从哺乳期切走视为强制断奶。'
+      + '哺乳期可留精但不会排卵或受孕（哺乳期闭经）；从哺乳期切走视为强制断奶。'
       + '角色体内已有胎儿或受精进行中，或正处于真妊娠、产兆前驱、产程时，本工具会被拒绝，不会覆盖这些状态。',
     input_schema: {
       type: 'object',
@@ -387,7 +385,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsExcreteMetabolism',
-    description: '缓解角色的生理需求：泄意、饿意、困意、乳意、臭意与伴意；其中 excretion（泄意）同时包含排尿与排便需求。乳意在普通周期表示乳房胀敏，在妊娠、假孕、产后恢复或哺乳期则可表示乳胀与泌乳需求；哺乳期缓解乳意 ≥10 视为一次有效哺乳/排乳——规律哺乳会持续维持泌乳（哺乳期不会结束），连续 bio.lactationDays 天（默认45）不哺乳身体才会退奶。性欲波动会自然产生乳意，不由伴意解除额外转化。进食缓解 hunger 会增加 excretion 与少量 sleep，睡眠缓解 sleep 会增加少量 hunger，高 odor 会降低 companionship 的社交缓解效果。不传 options 时使用默认释放量。pregnant.blockage 会降低排解效果，pregnant.acceleration 会加快累积并让刚缓解的对应需求较快回升，pregnant.expansion 会使对应需求容量由 150 扩为 200。',
+    description: '缓解角色的生理需求：泄意、饿意、困意、乳意与伴意；其中 excretion（泄意）同时包含排尿与排便需求。乳意在普通周期表示乳房胀敏，在妊娠、产后恢复或哺乳期则可表示乳胀与泌乳需求；哺乳期缓解乳意 ≥10 视为一次有效哺乳/排乳——规律哺乳会持续维持泌乳（哺乳期不会结束），连续 bio.lactationDays 天（默认45）不哺乳身体才会退奶。性欲波动会自然产生乳意，不由伴意解除额外转化。进食缓解 hunger 会增加 excretion 与少量 sleep，睡眠缓解 sleep 会增加少量 hunger。不传 options 时使用默认释放量。pregnant.blockage 会降低排解效果，pregnant.acceleration 会加快累积并让刚缓解的对应需求较快回升，pregnant.expansion 会使对应需求容量由 150 扩为 200。',
     input_schema: {
       type: 'object',
       properties: {
@@ -399,7 +397,6 @@ export const TOOL_DEFINITIONS = Object.freeze([
             hunger: { type: 'number', minimum: 0, maximum: 200 },
             sleep: { type: 'number', minimum: 0, maximum: 200 },
             milk: { type: 'number', minimum: 0, maximum: 200 },
-            odor: { type: 'number', minimum: 0, maximum: 200 },
             companionship: { type: 'number', minimum: 0, maximum: 200 },
           },
           additionalProperties: false,
@@ -639,17 +636,9 @@ function refreshOutfitPregFit(profile) {
   };
   return outfit;
 }
-/**
- * 单个排卵期自然排出的卵数 = 1 颗基础 + orgasmOvulationAmount 额外排卵倾向。
- *
- * 旧算法是「每天至少 1 颗 x 排卵天数」，而排卵天数随 menstrualLengthRatio 线性拉长，
- * 于是长周期种族按窗口长度虚增：精灵额外倾向明明是 0 却每周期排 6 颗、龙族排 8 颗，
- * 与该字段的语义（高潮诱发的额外排卵量，见 applyOrgasmOvulation）完全无关。
- * 周期越长排得越多也让「一年一次经期」这类设定无法成立。
- */
-function getNaturalOvulationTotal(profile) {
-  const extra = clampNumber(profile?.bio?.orgasmOvulationAmount, 0, 100, 1);
-  return Math.max(1, Math.round(1 + extra));
+/** 单个排卵期自然排出的卵数（固定 1 颗；高潮诱发排卵已随受孕向玩法移除） */
+function getNaturalOvulationTotal() {
+  return 1;
 }
 
 /** 自然排卵每个排卵期只发生一次，离开排卵期即重置 */
@@ -712,65 +701,7 @@ function getConceptionWeight(stage, gender, weightRatio = 1.0) {
   return Math.max(0.33, Math.min(3.0, Number(baseWeight * fluctuation * sexMultiplier * weightRatio)));
 }
 
-/**
- * 异期复孕：已在妊娠中再次受精，两胎孕龄不同步。
- *
- * 孕龄在这个引擎里是 pregnant.effectivePregnantDays 这一个共用数字（被引用 30 处，
- * 驱动阶段、产程、代谢、逾期）。不去动它，改成每胎存一个「受精当下的共用时钟读数」，
- * 该胎自己的年龄 = 共用时钟 − 该读数。阶段仍由共用时钟（＝最早那胎）驱动，
- * 这也是对的：母体的身体状态取决于最成熟的那一胎。
- *
- * 有效孕日对所有物种都是 0-280 的同一把尺（累加时乘妊娠速度，阶段门槛用固定值），
- * 所以下面这些天数不必再乘物种项。
- */
-const SUPERFETATION_STAGE = '孕早期';
-const SUPERFETATION_FULL_TERM_DAYS = 280;
-/** 孕早期长度，也就是可以再受精的原始视窗。从阶段表推导，别再写死一次 */
-const SUPERFETATION_RAW_WINDOW_DAYS = Number(PREGNANCY_STAGE_DAYS['孕早期']) || 84;
-/** 孕期受精的机率系数：正常受孕几乎是每天 80%，不压低的话异期会变成常态 */
-const SUPERFETATION_CHANCE_FACTOR = 0.10;
-/**
- * 揭晓时机：孕中期一开始，也就是孕早期结束的那一刻。
- * 在此之前模型与追踪页都看不到这一胎。
- * 这同时也是待著床胚胎被清除的时点——到了孕中期，没著床的没了，
- * 著床了的当场揭晓，不会有「已经存在却还藏着」的中间地带。
- */
-const SUPERFETATION_REVEAL_DAYS = SUPERFETATION_RAW_WINDOW_DAYS;
-
-/**
- * 受精视窗上限。不是整个孕早期——着床要花 getImplantationDays 个真实日，
- * 视窗末尾受精的胚胎会来不及着床就撞上孕中期的强制清除，形成一段
- * 「受精看似成功、实则注定作废」的死区。把视窗提前关闭，死区由构造上消失。
- * 妊娠速度极快的物种可能算出负值，那就是该物种不可能异期复孕。
- */
-function getSuperfetationWindowDays(profile) {
-  const speed = clampNumber(getGestationEffectiveSpeed(profile), 0.1, 20, 1);
-  return Math.max(0, SUPERFETATION_RAW_WINDOW_DAYS - (getImplantationDays(profile) * speed));
-}
-
-/** 这一胎自己的有效孕龄。既有胎儿没有 conceivedAtDays，视为 0 */
-function getFetusEffectiveAge(pregnant, fetus) {
-  const shared = clampNumber(pregnant?.effectivePregnantDays, 0, 9999, 0);
-  const conceivedAt = clampNumber(fetus?.conceivedAtDays, 0, 9999, 0);
-  return Math.max(0, shared - conceivedAt);
-}
-
-/**
- * 已着床的胎儿。没有 pendingImplantation 旗标＝已着床，
- * 所以存量存档不必迁移。随机挑胎、胎教、母胎互动都只能挑这些。
- */
-/**
- * 这一胎是否已经被角色本人知道。异期胎在揭晓（妊娠期一半）之前，
- * 提示词投影与追踪页都看不到它——它在状态里照常存在、照常发育、照常吃供养力，
- * 所以模型会看到「负担莫名偏高」，那是伏笔而不是穿帮。完整变量页仍然看得到。
- */
-export function isFetusKnownToCharacter(fetus) {
-  if (!fetus || typeof fetus !== 'object') return false;
-  if (fetus.pendingImplantation) return false;
-  if (!fetus.conceivedAtDays) return true;
-  return Boolean(fetus.revealed);
-}
-
+/** 有效胎儿（历史兼容：过滤掉旧存档里待著床的异期胚胎） */
 function isImplantedFetus(fetus) {
   return Boolean(fetus) && !fetus.pendingImplantation;
 }
@@ -792,16 +723,6 @@ function pickImplantedFetusIndex(fetuses) {
   }
   if (eligible.length === 0) return -1;
   return eligible[randomInt(0, eligible.length - 1)];
-}
-
-function cloneIdenticalFetus(fetus) {
-  return {
-    ...fetus,
-    embryoId: null,
-    fusionCheckedWith: [],
-    tendencyAngle: randomInt(0, 360),
-    affinity: 0,
-  };
 }
 
 function uniqueNonEmptyStrings(values) {
@@ -843,56 +764,6 @@ function ensureEmbryoMetadata(pregnant) {
   return fetuses;
 }
 
-function applyIdenticalSplit(profile, batch = null) {
-  const pregnant = profile.pregnant || {};
-  const fetuses = ensureEmbryoMetadata(pregnant);
-  if (fetuses.length === 0) return;
-  const targets = batch ? new Set(batch) : null;
-
-  const result = [];
-  let nextId = getNextEmbryoId(fetuses);
-  for (const baseFetus of fetuses) {
-    if (targets && !targets.has(baseFetus)) {
-      result.push(baseFetus);
-      continue;
-    }
-    result.push(baseFetus);
-    const splitRate = clampNumber(
-      profile?.bio?.identicalProbability,
-      0,
-      100,
-      5,
-    ) / 100;
-    let targetCount = 1;
-    if (splitRate > 0 && Math.random() < splitRate) {
-      targetCount = 2;
-      if (Math.random() < splitRate * splitRate) {
-        targetCount = 3;
-        if (Math.random() < splitRate * splitRate * splitRate) targetCount = 4;
-      }
-    }
-    // 分裂发生时才标记：复制体在栏位上与原胚一模一样，事后无从分辨谁跟谁同卵，
-    // 只能在这一刻把整组打上 identical 与共用的 identicalGroup
-    if (targetCount > 1) {
-      baseFetus.identicalGroup = baseFetus.embryoId;
-      baseFetus.tags = sanitizeFetusTagList([...(baseFetus.tags || []), 'identical']);
-    }
-    while (targetCount > 1) {
-      const clone = cloneIdenticalFetus(baseFetus);
-      clone.embryoId = nextId;
-      clone.identicalGroup = baseFetus.identicalGroup;
-      nextId += 1;
-      result.push(clone);
-      targetCount -= 1;
-    }
-  }
-  pregnant.fetuses = result;
-  pregnant.fetusesCount = result.length;
-}
-
-/**
- * @param profile 承载妊娠的角色（决定孕育环境）
- */
 function createSimpleFetus(profile, sperm, cycleStage) {
   const gender = deriveFetusGender();
   return {
@@ -916,9 +787,7 @@ function updateFetalEnergyDrain(profile) {
   const motherBreedTolerance = clampNumber(profile?.bio?.breedTolerance, 0.1, 100, 1.0);
   profile.pregnant.fetalEnergyDrain = fetuses.reduce((sum, fetus) => {
     const weight = clampNumber(fetus?.weight, 0.33, 3.0, 1.0);
-    // 每胎用自己的孕龄：异期复孕时晚到那胎不该按先来者的进度计算负担。
-    // 既有胎儿没有 conceivedAtDays，算出来就是共用时钟，行为不变。
-    const ownAge = Math.max(0, effectivePregnantDays - clampNumber(fetus?.conceivedAtDays, 0, 9999, 0));
+    const ownAge = effectivePregnantDays;
     const ageInDays = ownAge * weight;
     const fetalAgeWeeks = ageInDays / 7;
     const fetalLoad = fetalAgeWeeks / 40;
@@ -967,11 +836,9 @@ function applyPregnancyPhysiology(profile, runtime) {
   const averageRecoveryCoefficient = recoveryAccumulator / Math.max(totalWeight, 0.33);
   const fetusCountModifier = 1 + ((fetuses.length - 1) * 0.08);
   const toleranceCountModifier = Math.max(0.6, 1 - ((fetuses.length - 1) * 0.04));
-  const gestationModifierMultiplier = getGestationModifierMultiplier(profile);
 
-  // 人类锁死：妊娠速度与分娩难度恒 1.0，剩下真正影响妊娠参数的只有
-  // 胎数修正与用户的 gestationModifier。
-  const gestationEffectiveSpeed = clampNumber(gestationModifierMultiplier, 0, 20, 1.0);
+  // 人类锁死 + 妊娠变速已移除：速度恒 1.0，妊娠参数只剩胎数修正。
+  const gestationEffectiveSpeed = 1.0;
   const recoveryGestationSpeed = Math.max(0.1, gestationEffectiveSpeed > 0 ? gestationEffectiveSpeed : 1.0);
   const birthDifficulty = clampNumber(fetusCountModifier, 0.1, 100, originalBio.birthDifficulty);
   // 承载耐受只取母体自身 x 胎数修正：breedTolerance 描述「这具身体多能扛妊娠」，
@@ -996,11 +863,10 @@ function applyPregnancyPhysiology(profile, runtime) {
 function restorePregnancyPhysiology(profile, runtime) {
   const originalBio = runtime?.originalPregnancyBio;
   if (!originalBio) return false;
-  const gestationModifierMultiplier = getGestationModifierMultiplier(profile);
   profile.bio = {
     ...(profile.bio || {}),
     gestationSpeciesSpeed: clampNumber(originalBio.gestationSpeciesSpeed, 0.1, 20, 1.0),
-    gestationEffectiveSpeed: clampNumber(originalBio.gestationSpeciesSpeed * gestationModifierMultiplier, 0, 20, 1.0),
+    gestationEffectiveSpeed: clampNumber(originalBio.gestationSpeciesSpeed, 0, 20, 1.0),
     birthDifficulty: clampNumber(originalBio.birthDifficulty, 0.1, 100, 1.0),
     breedTolerance: clampNumber(originalBio.breedTolerance, 0.1, 100, 1.0),
     recoveryDays: Math.max(1, Math.round(clampNumber(originalBio.recoveryDays, 1, 9999, 56))),
@@ -1220,7 +1086,6 @@ function stageAllowsSpermRetention(stage) {
   return MENSTRUAL_STAGES.includes(stage)
     || PREGNANCY_STAGES.includes(stage)
     || stage === '产后恢复'
-    || stage === '假孕期'
     || stage === '哺乳期'
     || stage === '停经'
     || stage === '围绝经期晚期';
@@ -1254,9 +1119,8 @@ function processSpermLifecycle(profile, stage, tick) {
 
 /**
  * 一次受精判定。回传剩余卵数。
- * chanceFactor 供异期复孕压低机率；superfetation 时另外标记新胚胎。
  */
-function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceFactor = 1, superfetation = false }) {
+function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceFactor = 1 }) {
   const base = profile.base || {};
   const pregnant = profile.pregnant || {};
   const sperms = Array.isArray(base.sperms) ? base.sperms.map((item) => ({ ...item })) : [];
@@ -1280,10 +1144,8 @@ function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceF
     if (winner) {
       pregnant.fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
       const fetus = createSimpleFetus(profile, winner, stage);
-      // 孕期受精 = 异期复孕：记下受精当下的共用时钟、待著床、按落后进度打折
-      if (superfetation) markSuperfetationFetus(profile, fetus);
       pregnant.fetuses.push(fetus);
-      notify.secondly = superfetation ? `${name}在妊娠中再度受精` : `${name}受精成功`;
+      notify.secondly = `${name}受精成功`;
       eggs -= 1;
     }
     break;
@@ -1299,89 +1161,6 @@ function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceF
  * 大约只有一半重」的直觉。这是乘在 getConceptionWeight 既有的四个乘数之上，
  * 种族混血偏移（weightRatio）照常生效；两者都不利时会撞到 0.33 的地板。
  */
-function markSuperfetationFetus(profile, fetus) {
-  const pregnant = profile.pregnant || {};
-  const conceivedAt = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0);
-  const lag = Math.min(conceivedAt / SUPERFETATION_FULL_TERM_DAYS, 1);
-  fetus.conceivedAtDays = conceivedAt;
-  fetus.pendingImplantation = true;
-  fetus.tags = sanitizeFetusTagList([...(fetus.tags || []), 'superfetation']);
-  fetus.weight = clampNumber(fetus.weight * ((1 - lag) ** 2), 0.33, 3.0, 1.0);
-}
-
-/**
- * 待着床的异期胚胎。刻意不重用一般的着床区块——那一段成功时会把阶段设成孕早期、
- * 重设两个孕龄时钟、重置羊膜耐久、并多记一次怀孕经验，等于把先来那胎的妊娠整个洗掉；
- * 失败时更会 pregnant.fetuses = [] 把既有胎儿一起清空。
- *
- * 这里只做属于新胚胎自己的事：倒数、着床成败、分裂与融合都只作用於本批。
- */
-/**
- * 异期胎的揭晓。在此之前它在状态里照常存在、照常发育，只是提示词投影与追踪页
- * 都看不到它——角色本人还不知道自己怀了两胎。隐藏期间它仍然吃供养力，
- * 所以模型会看到「负担莫名偏高」，那是伏笔而不是穿帮。
- */
-function revealSuperfetationFetuses(profile, name, notify, { force = false } = {}) {
-  const pregnant = profile.pregnant || {};
-  const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
-  const shared = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0);
-  let revealed = 0;
-  for (const fetus of fetuses) {
-    if (!fetus?.conceivedAtDays || fetus.revealed || fetus.pendingImplantation) continue;
-    const threshold = SUPERFETATION_REVEAL_DAYS;
-    if (!force && shared < threshold) continue;
-    fetus.revealed = true;
-    revealed += 1;
-  }
-  if (revealed > 0 && notify) {
-    notify.firstly = `${name}被检查出体内另有 ${revealed} 胎，孕龄与先来者并不一致`;
-  }
-  return revealed > 0;
-}
-
-function processSuperfetationImplantation(profile, tick, notify, name) {
-  const base = profile.base || {};
-  const pregnant = profile.pregnant || {};
-  const stage = String(base.stage || '');
-  if (!isTruePregnancyStage(stage)) return;
-  const fetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses : [];
-  const pending = fetuses.filter((fetus) => fetus?.pendingImplantation);
-  if (pending.length === 0) return;
-
-  // 还没着床就撞上孕中期：一律清掉。着床太晚本来就该失败，
-  // 也顺带保证不会有未着床的胚胎活到分娩变成孩子。
-  if (stage !== SUPERFETATION_STAGE) {
-    pregnant.fetuses = fetuses.filter((fetus) => !fetus?.pendingImplantation);
-    pregnant.fetusesCount = pregnant.fetuses.length;
-    base.fertilizationDays = 0;
-    notify.secondly = `${name}体内新的受精卵未能著床`;
-    updateFetalEnergyDrain(profile);
-    return;
-  }
-
-  // 妊娠期间 base.fertilizationDays 是闲置的（一般着床区块两条分支都要求
-  // !isPregnancyStage），借来当这一批的倒数
-  base.fertilizationDays = clampNumber(base.fertilizationDays, 0, 9999, 0) + tick.deltaDays;
-  if (base.fertilizationDays < getImplantationDays(profile)) return;
-
-  const vitality = clampNumber(base.vitality, 0, 200, 100);
-  const implantationFailChance = vitality < 100 ? (100 - vitality) / 100 : 0;
-  base.fertilizationDays = 0;
-  if (Math.random() < implantationFailChance) {
-    // 只移除本批，先来那胎不受影响
-    pregnant.fetuses = fetuses.filter((fetus) => !fetus?.pendingImplantation);
-    pregnant.fetusesCount = pregnant.fetuses.length;
-    notify.secondly = `${name}体内新的受精卵著床失败`;
-    updateFetalEnergyDrain(profile);
-    return;
-  }
-
-  for (const fetus of pending) delete fetus.pendingImplantation;
-  applyIdenticalSplit(profile, pending);
-  pregnant.fetusesCount = Array.isArray(pregnant.fetuses) ? pregnant.fetuses.length : 0;
-  updateFetalEnergyDrain(profile);
-}
-
 function processSimpleConception(profile, tick, notify, name) {
   const base = profile.base || {};
   const pregnant = profile.pregnant || {};
@@ -1410,23 +1189,7 @@ function processSimpleConception(profile, tick, notify, name) {
     }
 
     base.eggs = attemptFertilization(profile, { deltaDays, stage, name, notify, chanceFactor: perimenopauseFertilityFactor });
-  } else if (stage === SUPERFETATION_STAGE) {
-    // 异期复孕。卵不是这里排的——高潮排卵本来就不挡妊娠，而孕期中卵子既不衰减
-    // 也不清除，所以「这个周期没用掉的排卵留到孕早期」是现成行为，不必新增。
-    // 这里只把受精那一步的闸门打开，并按进度压低机率：越晚越难，视窗末端归零。
-    const windowDays = getSuperfetationWindowDays(profile);
-    const conceivedAt = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0);
-    if (windowDays > 0 && conceivedAt < windowDays) {
-      const decay = 1 - (conceivedAt / windowDays);
-      base.eggs = attemptFertilization(profile, {
-        deltaDays, stage, name, notify,
-        chanceFactor: SUPERFETATION_CHANCE_FACTOR * decay,
-        superfetation: true,
-      });
-    }
   }
-
-  processSuperfetationImplantation(profile, tick, notify, name);
 
   const hasPreimplantationEmbryos = !isPregnancyStage(stage)
     && Array.isArray(pregnant.fetuses)
@@ -1448,7 +1211,6 @@ function processSimpleConception(profile, tick, notify, name) {
         const gestationSpeed = clampNumber(getGestationEffectiveSpeed(profile), 0, 20, 1);
         // 产后恢复期可再孕：新妊娠＝断奶， pendingLactation 就地作废
         delete base.pendingLactation;
-        applyIdenticalSplit(profile);
         base.stage = '孕早期';
         base.days = 0;
         base.fertilizationDays = 0;
@@ -1481,7 +1243,7 @@ function normalizeToolCallArguments(value) {
 }
 
 function isPregnancyStage(stage) {
-  return PREGNANCY_STAGES.includes(stage) || stage === '假孕期' || stage === '产兆前驱' || LABOR_STAGES.includes(stage);
+  return PREGNANCY_STAGES.includes(stage) || stage === '产兆前驱' || LABOR_STAGES.includes(stage);
 }
 
 function clearPsychologyTransitionState(profile, stage, days) {
@@ -1504,7 +1266,7 @@ function isTruePregnancyStage(stage) {
 
 function canProduceMilk(profile) {
   const stage = String(profile?.base?.stage || '');
-  return stage === '假孕期' || stage === '产后恢复' || stage === '哺乳期' || isTruePregnancyStage(stage);
+  return stage === '产后恢复' || stage === '哺乳期' || isTruePregnancyStage(stage);
 }
 
 const BASE_METABOLISM_CAP = 150;
@@ -1526,7 +1288,7 @@ function getMetabolismCap(profile, key, currentFlux = 0) {
 
 function applyMetabolismCapacityLimits(profile) {
   const metabolism = profile?.metabolism || {};
-  for (const key of ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship']) {
+  for (const key of ['excretion', 'hunger', 'sleep', 'milk', 'companionship']) {
     metabolism[key] = clampNumber(metabolism[key], 0, getMetabolismCap(profile, key), 0);
   }
   profile.metabolism = metabolism;
@@ -1548,7 +1310,6 @@ function getMilkFetalLoad(profile) {
   const stage = String(profile?.base?.stage || '');
   if (stage === '产后恢复') return 1.35;
   if (stage === '哺乳期') return 1.5;
-  if (stage === '假孕期') return 0.08;
   if (!isTruePregnancyStage(stage)) return 0;
 
   const pregnant = profile?.pregnant || {};
@@ -1573,7 +1334,6 @@ function applyRetention(reduction, retentionRate) {
 }
 
 const PREGNANCY_BLOCKAGE_STAGE_CHANCE = Object.freeze({
-  假孕期: 10,
   孕早期: 28,
   孕中期: 22,
   孕晚期: 34,
@@ -1588,7 +1348,6 @@ const PREGNANCY_BLOCKAGE_STAGE_CHANCE = Object.freeze({
 });
 
 const PREGNANCY_BLOCKAGE_STAGE_SEVERITY = Object.freeze({
-  假孕期: 0.12,
   孕早期: 0.20,
   孕中期: 0.18,
   孕晚期: 0.26,
@@ -1603,18 +1362,17 @@ const PREGNANCY_BLOCKAGE_STAGE_SEVERITY = Object.freeze({
 });
 
 const PREGNANCY_BLOCKAGE_STAGE_WEIGHTS = Object.freeze({
-  假孕期: { milk: 3, hunger: 3, sleep: 2, companionship: 2, odor: 1 },
-  孕早期: { hunger: 5, excretion: 4, sleep: 3, companionship: 2, odor: 1, milk: 1 },
-  孕中期: { excretion: 5, hunger: 3, sleep: 3, companionship: 2, milk: 2, odor: 1 },
-  孕晚期: { excretion: 6, sleep: 3, milk: 3, hunger: 2, companionship: 2, odor: 2 },
-  临产期: { excretion: 6, sleep: 3, milk: 3, odor: 2, hunger: 2, companionship: 2 },
-  逾期: { excretion: 6, sleep: 4, milk: 3, odor: 2, hunger: 2, companionship: 2 },
-  产兆前驱: { excretion: 6, sleep: 4, milk: 3, odor: 2, companionship: 2, hunger: 1 },
-  第一产程: { excretion: 6, sleep: 4, odor: 2, milk: 2, companionship: 2, hunger: 1 },
-  第二产程: { excretion: 5, sleep: 4, odor: 2, milk: 2, companionship: 2, hunger: 1 },
-  第三产程: { sleep: 4, odor: 3, milk: 3, companionship: 3, excretion: 2, hunger: 1 },
-  产后恢复: { milk: 5, sleep: 4, companionship: 4, odor: 3, excretion: 2, hunger: 1 },
-  哺乳期: { milk: 6, sleep: 3, companionship: 3, odor: 2, excretion: 1, hunger: 1 },
+  孕早期: { hunger: 5, excretion: 4, sleep: 3, companionship: 2, milk: 1 },
+  孕中期: { excretion: 5, hunger: 3, sleep: 3, companionship: 2, milk: 2 },
+  孕晚期: { excretion: 6, sleep: 3, milk: 3, hunger: 2, companionship: 2 },
+  临产期: { excretion: 6, sleep: 3, milk: 3, hunger: 2, companionship: 2 },
+  逾期: { excretion: 6, sleep: 4, milk: 3, hunger: 2, companionship: 2 },
+  产兆前驱: { excretion: 6, sleep: 4, milk: 3, companionship: 2, hunger: 1 },
+  第一产程: { excretion: 6, sleep: 4, milk: 2, companionship: 2, hunger: 1 },
+  第二产程: { excretion: 5, sleep: 4, milk: 2, companionship: 2, hunger: 1 },
+  第三产程: { sleep: 4, milk: 3, companionship: 3, excretion: 2, hunger: 1 },
+  产后恢复: { milk: 5, sleep: 4, companionship: 4, excretion: 2, hunger: 1 },
+  哺乳期: { milk: 6, sleep: 3, companionship: 3, excretion: 1, hunger: 1 },
 });
 
 const PREGNANCY_BLOCKAGE_KEY_SEVERITY_MULTIPLIER = Object.freeze({
@@ -1622,7 +1380,6 @@ const PREGNANCY_BLOCKAGE_KEY_SEVERITY_MULTIPLIER = Object.freeze({
   sleep: 1.15,
   milk: 1.15,
   hunger: 1.15,
-  odor: 0.85,
   companionship: 1.0,
 });
 
@@ -1631,7 +1388,6 @@ const PREGNANCY_BLOCKAGE_KEY_SEVERITY_CAP = Object.freeze({
   sleep: 0.75,
   milk: 0.75,
   hunger: 0.75,
-  odor: 0.65,
   companionship: 0.75,
 });
 
@@ -1640,7 +1396,6 @@ function canHavePregnancyBlockage(profile) {
   const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
   return fetuses.length > 0
     || PREGNANCY_STAGES.includes(stage)
-    || stage === '假孕期'
     || stage === '产兆前驱'
     || LABOR_STAGES.includes(stage)
     || stage === '产后恢复'
@@ -1648,7 +1403,7 @@ function canHavePregnancyBlockage(profile) {
 }
 
 function getAvailablePregnancySymptomKeys(profile) {
-  return ['excretion', 'hunger', 'sleep', 'milk', 'odor', 'companionship'];
+  return ['excretion', 'hunger', 'sleep', 'milk', 'companionship'];
 }
 
 function getPregnancyBlockageChance(profile) {
@@ -1764,7 +1519,6 @@ function applyPassiveMetabolism(profile, tick) {
   if (hours <= 0) return;
   applyCycleBreastNeedGain(profile, hours);
   applyMilkGain(profile, 0.08 * hours);
-  addMetabolismValue(profile, 'odor', 0.04 * hours, 0, 150);
   addMetabolismValue(profile, 'companionship', 0.05 * hours, 0, 150);
 }
 
@@ -1778,27 +1532,11 @@ function applyMilkFromLibido(profile, changeValue) {
   applyMilkGain(profile, delta * 0.18);
 }
 
-function applyOdorGain(profile, amount) {
-  return addMetabolismValue(profile, 'odor', Math.max(0, Number(amount) || 0), 0, 150);
-}
-
-function getOdorCompanionshipReliefMultiplier(odor) {
-  const value = clampNumber(odor, 0, 150, 0);
-  if (value >= 125) return 0.45;
-  if (value >= 100) return 0.60;
-  if (value >= 75) return 0.75;
-  return 1;
-}
-
 function applyAccelerationRebound(profile, key, relievedAmount) {
   const released = Math.max(0, Number(relievedAmount) || 0);
   const severity = getActiveAccelerationMultiplier(profile, key) - 1;
   if (released <= 0 || severity <= 0) return 0;
   return addMetabolismValue(profile, key, released * severity * 0.25, 0, 150);
-}
-
-function shouldResetOrgasmOvulation(stage) {
-  return stage === '月经期' || stage === '产后恢复';
 }
 
 function getLibidoCap(profile) {
@@ -1923,7 +1661,6 @@ function applyNaturalMetabolismRecovery(profile, tick) {
     metabolism.sleep = 0;
     metabolism.flux = 0;
     metabolism.milk = 0;
-    metabolism.odor = 0;
     metabolism.companionship = 0;
     profile.metabolism = metabolism;
     return;
@@ -1947,7 +1684,6 @@ function applyWeeklyMetabolismRoutine(profile, tick, options = {}) {
   const metabolism = profile.metabolism || {};
   const settledWeeks = Math.max(0, Math.floor(Number(tick.passedLifestyleWeeks) || 0));
   if (settledWeeks > 0) {
-    metabolism.odor = 0;
     metabolism.companionship = Math.max(0, clampNumber(metabolism.companionship, 0, getMetabolismCap(profile, 'companionship'), 0) - (35 * settledWeeks));
   }
   if (options.enteredFollicular && !canProduceMilk({ ...profile, base: { ...(profile.base || {}), stage: options.stage } })) {
@@ -1995,7 +1731,6 @@ function updateAdvisoryNotify(profile, female) {
   const hungerLevel = getMetabolismLevel(metabolism.hunger, getMetabolismCap(profile, 'hunger'));
   const sleepLevel = getMetabolismLevel(metabolism.sleep, getMetabolismCap(profile, 'sleep'));
   const milkLevel = getMetabolismLevel(metabolism.milk, getMetabolismCap(profile, 'milk'));
-  const odorLevel = getMetabolismLevel(metabolism.odor, getMetabolismCap(profile, 'odor'));
   const companionshipLevel = getMetabolismLevel(metabolism.companionship, getMetabolismCap(profile, 'companionship'));
   const maybePushNeed = (key, label, level) => {
     if (['高', '满', '爆'].includes(level)) needs.push(`${label}:${level}`);
@@ -2005,7 +1740,6 @@ function updateAdvisoryNotify(profile, female) {
   maybePushNeed('hunger', '饿意', hungerLevel);
   maybePushNeed('sleep', '困意', sleepLevel);
   maybePushNeed('milk', '乳意', milkLevel);
-  maybePushNeed('odor', '臭意', odorLevel);
   maybePushNeed('companionship', '伴意', companionshipLevel);
 
   const reminders = [];
@@ -2013,9 +1747,7 @@ function updateAdvisoryNotify(profile, female) {
     reminders.push(`${female}有强烈的生理需求（${needs.join('、')}），应优先使用 bsExcreteMetabolism 缓解生理不适`);
   }
   if (['高', '满', '爆'].includes(companionshipLevel)) {
-    reminders.push(odorLevel === '高' || odorLevel === '满' || odorLevel === '爆'
-      ? `${female}渴望陪伴，但当前臭意会妨碍社交舒适度；清洁后再给予陪伴或安抚更有效`
-      : `${female}渴望陪伴，可优先给予陪伴、交流或安抚`);
+    reminders.push(`${female}渴望陪伴，可优先给予陪伴、交流或安抚`);
   }
 
   const stage = String(base.stage || '');
@@ -2094,7 +1826,6 @@ function applyExcreteMetabolism(chatState, args) {
   const currentHunger = clampNumber(metabolism.hunger, 0, getMetabolismCap(profile, 'hunger'), 0);
   const currentSleep = clampNumber(metabolism.sleep, 0, getMetabolismCap(profile, 'sleep'), 0);
   const currentMilk = clampNumber(metabolism.milk, 0, getMetabolismCap(profile, 'milk'), 0);
-  const currentOdor = clampNumber(metabolism.odor, 0, getMetabolismCap(profile, 'odor'), 0);
   const currentCompanionship = clampNumber(metabolism.companionship, 0, getMetabolismCap(profile, 'companionship'), 0);
 
   const optionReduction = (key, fallback = 0) => Math.max(0, options[key] !== undefined ? Number(options[key]) || 0 : fallback);
@@ -2103,36 +1834,29 @@ function applyExcreteMetabolism(chatState, args) {
   const hungerReduction = optionReduction('hunger', useDefaults ? 40 : 0);
   const sleepReduction = optionReduction('sleep', useDefaults ? 40 : 0);
   const milkReduction = optionReduction('milk', useDefaults ? 30 : 0);
-  const odorReduction = optionReduction('odor');
   const companionshipReduction = optionReduction('companionship');
 
   const relievedExcretion = Math.min(currentExcretion, applyRetention(excretionReduction, getActiveBlockageRetention(profile, 'excretion')));
   const relievedHunger = Math.min(currentHunger, applyRetention(hungerReduction, getActiveBlockageRetention(profile, 'hunger')));
   const relievedSleep = Math.min(currentSleep, applyRetention(sleepReduction, getActiveBlockageRetention(profile, 'sleep')));
   const relievedMilk = Math.min(currentMilk, applyRetention(milkReduction, getActiveBlockageRetention(profile, 'milk')));
-  const relievedOdor = Math.min(currentOdor, applyRetention(odorReduction, getActiveBlockageRetention(profile, 'odor')));
-  const remainingOdor = Math.max(0, currentOdor - relievedOdor);
-  const companionshipRelief = applyRetention(companionshipReduction, getActiveBlockageRetention(profile, 'companionship'))
-    * getOdorCompanionshipReliefMultiplier(remainingOdor);
+  const companionshipRelief = applyRetention(companionshipReduction, getActiveBlockageRetention(profile, 'companionship'));
   const relievedCompanionship = Math.min(currentCompanionship, companionshipRelief);
 
   metabolism.excretion = Math.max(0, currentExcretion - relievedExcretion);
   metabolism.hunger = Math.max(0, currentHunger - relievedHunger);
   metabolism.sleep = Math.max(0, currentSleep - relievedSleep);
   metabolism.milk = Math.max(0, currentMilk - relievedMilk);
-  metabolism.odor = remainingOdor;
   metabolism.companionship = Math.max(0, currentCompanionship - relievedCompanionship);
 
   addMetabolismValue(profile, 'excretion', relievedHunger * 0.5, 0, 150);
   addMetabolismValue(profile, 'sleep', relievedHunger * 0.1, 0, 150);
   addMetabolismValue(profile, 'hunger', relievedSleep * 0.1, 0, 150);
-  applyOdorGain(profile, (relievedExcretion * 0.12) + (canProduceMilk(profile) ? relievedMilk * 0.05 : 0));
   for (const [key, amount] of [
     ['excretion', relievedExcretion],
     ['hunger', relievedHunger],
     ['sleep', relievedSleep],
     ['milk', relievedMilk],
-    ['odor', relievedOdor],
     ['companionship', relievedCompanionship],
   ]) {
     applyAccelerationRebound(profile, key, amount);
@@ -2188,8 +1912,6 @@ function appendChildrenFromFetuses(profile, fetuses) {
       id: createChildId(),
       name: null,
       fathers: String(fetus?.fathers || '未知'),
-      tags: sanitizeFetusTagList(fetus?.tags),
-      identicalGroup: Number.isFinite(Number(fetus?.identicalGroup)) ? Number(fetus.identicalGroup) : null,
       birthEmbryoId: Number.isFinite(Number(fetus?.embryoId)) ? Number(fetus.embryoId) : null,
       gender: String(fetus?.gender || '未知'),
       race: String(fetus?.race || '人类'),
@@ -2218,7 +1940,6 @@ function applyChildbirthInternal(profile, female, isNatural) {
   const base = profile.base || {};
   const notify = profile.notify || {};
   // 生出来了就没有藏的余地
-  revealSuperfetationFetuses(profile, female, null, { force: true });
   const experience = profile.experience || {};
   const runtime = profile.__runtimeRef || null;
   const remainingFetuses = Array.isArray(pregnant.fetuses) ? pregnant.fetuses.map((item) => ({ ...item })) : [];
@@ -2784,10 +2505,6 @@ function applyAbortion(chatState, args) {
     return { applied: false, message: `bsAbortion skipped for ${female}: no conception state.` };
   }
 
-  // 假孕期没有胎儿：结束假孕请走 bsSetMenstrualPhases，不该记进流产经验
-  if (stage === '假孕期' && fetuses.length === 0) {
-    return { applied: false, message: `bsAbortion skipped for ${female}: 假孕期无胎儿，请用 bsSetMenstrualPhases 结束假孕。` };
-  }
 
   if (immune.miscarriage && !force) {
     profile.notify = {
@@ -3191,70 +2908,6 @@ function applyMaternalFetalInteraction(chatState, args) {
   return { applied: true, message: `bsMaternalFetalInteraction applied to ${female}.` };
 }
 
-function applyEggGain(profile, amount) {
-  const nextAmount = Math.max(0, Number(amount) || 0);
-  if (nextAmount <= 0) return { applied: false, usedCooldown: false };
-
-  const base = profile.base || {};
-  const cooldown = profile.cooldown || {};
-  const stage = String(base.stage || '');
-
-  if (stage === '假孕期') {
-    return { applied: false, usedCooldown: false };
-  }
-
-  // 哺乳期闭经：催情/高潮也不排卵
-  if (stage === '哺乳期') {
-    return { applied: false, usedCooldown: false };
-  }
-
-  // 停经/围绝经期晚期/初潮前：卵巢功能已停或未启动，同样不排卵
-  if (stage === '停经' || stage === '围绝经期晚期' || stage === '无经期') {
-    return { applied: false, usedCooldown: false };
-  }
-
-  if (stage === '排卵期') {
-    base.eggs = clampNumber(base.eggs, 0, 999, 0) + nextAmount;
-    base.uterinePressure = clampNumber(base.uterinePressure, 0, 999, 0) + 2;
-    return { applied: true, usedCooldown: false };
-  }
-
-  if (cooldown.orgasmOvulationUsed) {
-    return { applied: false, usedCooldown: true };
-  }
-
-  base.eggs = clampNumber(base.eggs, 0, 999, 0) + nextAmount;
-  base.uterinePressure = clampNumber(base.uterinePressure, 0, 999, 0) + 2;
-  return { applied: true, usedCooldown: true };
-}
-
-function maybeTriggerOrgasmOvulation(character) {
-  const next = character;
-  const profile = next.profile || {};
-  const cooldown = profile.cooldown || {};
-  const bio = profile.bio || {};
-  const base = profile.base || {};
-  const notify = profile.notify || {};
-
-  const currentLibido = clampNumber(base.libido, 0, 9999, 0);
-  const libidoCap = getLibidoCap(profile);
-  if (currentLibido < libidoCap || cooldown.orgasmOvulationUsed) return false;
-
-  const amount = Math.max(0, clampNumber(bio.orgasmOvulationAmount, 0, 100, 1));
-  const eggResult = applyEggGain(profile, amount);
-  if (!eggResult.applied) return false;
-  base.libido = 0;
-  profile.cooldown = {
-    ...cooldown,
-    orgasmOvulationUsed: eggResult.usedCooldown ? true : Boolean(cooldown.orgasmOvulationUsed),
-  };
-  profile.notify = {
-    ...notify,
-    secondly: `${next.name}因高潮而额外排卵，性欲归零`,
-  };
-  return true;
-}
-
 function getMenstrualCycleLength(profile) {
   const total = MENSTRUAL_STAGES.reduce((sum, stage) => sum + (getStageLimit(profile, stage) || 0), 0);
   return Math.max(1, total || 28);
@@ -3384,16 +3037,6 @@ function advanceMenstrualStage(profile, stage, daysValue) {
   };
 }
 
-function shouldEnterPseudoPregnancy(profile, previousStage, nextStage) {
-  if (previousStage === '月经期' || nextStage !== '月经期') return false;
-  const base = profile?.base || {};
-  const experience = profile?.experience || {};
-  const psyStress = clampNumber(base.psyStress, 0, 9999, 0);
-  const libido = clampNumber(base.libido, 0, 9999, 0);
-  const latestSexPartner = String(experience.latestSexPartner || '').trim();
-  return psyStress >= 100 && libido >= 50 && latestSexPartner.length > 0;
-}
-
 function applyTimeToCharacter(character, tick) {
   const next = cloneValue(character);
   snapshotOriginalPregnancyBio(next);
@@ -3433,13 +3076,6 @@ function applyTimeToCharacter(character, tick) {
     days = advanced.days;
     stageChanged = advanced.changed;
     enteredFollicular = advanced.enteredFollicular;
-    if (stageChanged && shouldEnterPseudoPregnancy(profile, oldStage, stage)) {
-      stage = '假孕期';
-      days = 0;
-      pregnant.pregnantDays = 0;
-      pregnant.effectivePregnantDays = 0;
-      notify.secondly = `${next.name}因进入月经期时心理压力偏高、性欲偏高且近期有性接触记录，出现了假孕症状`;
-    }
   } else if (PREGNANCY_STAGES.includes(stage)) {
     const oldPregnantDays = clampNumber(pregnant.pregnantDays, 0, 9999, 0);
     pregnant.pregnantDays = oldPregnantDays + deltaDays;
@@ -3449,7 +3085,6 @@ function applyTimeToCharacter(character, tick) {
     if (newWeek > oldWeek && isHere) {
       applyWeeklyNutrition(profile);
     }
-    revealSuperfetationFetuses(profile, next.name, notify);
     const derived = derivePregnancyStageState(pregnant.effectivePregnantDays, 1);
     stage = derived.stage;
     days = derived.days;
@@ -3509,7 +3144,7 @@ function applyTimeToCharacter(character, tick) {
     if (base.daysSinceMilkRelief === undefined) base.daysSinceMilkRelief = 0;
     base.daysSinceMilkRelief = Math.max(0, Number(base.daysSinceMilkRelief) || 0) + deltaDays;
     days += deltaDays;
-    // 哺乳期闭经：排卵与月经被抑制，详见 applyEggGain / allowsNaturalConception
+    // 哺乳期闭经：排卵与月经被抑制
     const weaningWindow = getStageLimit(profile, '哺乳期');
     if (Number(base.daysSinceMilkRelief) > weaningWindow) {
       // 自然离乳：回卵泡期，周期重启；跨周结算会把已不属于哺乳期的 milk 清零
@@ -3526,17 +3161,7 @@ function applyTimeToCharacter(character, tick) {
       pregnant.fetalEnergyDrain = 0;
       base.fertilizationDays = 0;
     }
-  } else if (stage === '假孕期') {
-    pregnant.pregnantDays = clampNumber(pregnant.pregnantDays, 0, 9999, 0) + deltaDays;
-    const pseudoLimit = Math.max(1, 84 * clampNumber(getGestationEffectiveSpeed({ ...profile, bio }), 0.1, 20, 1));
-    if (pregnant.pregnantDays > pseudoLimit) {
-      stage = '月经期';
-      days = 0;
-      stageChanged = true;
-      pregnant.pregnantDays = 0;
-      pregnant.effectivePregnantDays = 0;
-    }
-  } else if (stage === '产兆前驱') {
+    } else if (stage === '产兆前驱') {
     const oldPregnantDays = clampNumber(pregnant.pregnantDays, 0, 9999, 0);
     pregnant.pregnantDays = oldPregnantDays + deltaDays;
     pregnant.effectivePregnantDays = clampNumber(pregnant.effectivePregnantDays, 0, 9999, 0) + (deltaDays * clampNumber(getGestationEffectiveSpeed({ ...profile, bio }), 0, 20, 1));
@@ -3659,7 +3284,6 @@ function applyTimeToCharacter(character, tick) {
   };
   profile.cooldown = {
     ...cooldown,
-    orgasmOvulationUsed: shouldResetOrgasmOvulation(stage) ? false : Boolean(cooldown.orgasmOvulationUsed),
     naturalOvulationUsed: shouldResetNaturalOvulation(stage) ? false : Boolean((profile.cooldown || cooldown).naturalOvulationUsed),
     pregnancyPressureWarning: shouldKeepPregnancyPressureWarning(profile) ? Boolean((profile.cooldown || cooldown).pregnancyPressureWarning) : false,
     psychologyUpdateUsed: tick.passedHours > 0 ? false : Boolean(cooldown.psychologyUpdateUsed),
@@ -3765,7 +3389,6 @@ function applyCharacterStatus(chatState, args) {
   }
 
   next.profile.base = base;
-  maybeTriggerOrgasmOvulation(next);
   chatState.characters[female] = next;
   return { applied: true, message: `bsUpdateCharacterStatus applied to ${female}.` };
 }
@@ -4186,7 +3809,7 @@ function applyUpdatePsychology(chatState, args) {
   const stage = String(base.stage || '');
   // 妊娠侧写 mens 会在转入妊娠满 7 天时被 clearPsychologyTransitionState
   // 清空（实测：孕 10 天后 mens.stance 变 undefined），等于白写一场。
-  const isPregnancySide = PREGNANCY_STAGES.includes(stage) || stage === '假孕期' || stage === '产兆前驱' || LABOR_STAGES.includes(stage);
+  const isPregnancySide = PREGNANCY_STAGES.includes(stage) || stage === '产兆前驱' || LABOR_STAGES.includes(stage);
 
   const targetGroup = isPregnancySide ? 'preg' : 'mens';
   const sourcePatch = options[targetGroup];
@@ -4291,7 +3914,6 @@ function applyAddSperm(chatState, args) {
   }
   next.profile.experience = experience;
   if (amount > 0) {
-    applyOdorGain(next.profile, Math.min(18, 4 + Math.log10(Math.max(1, amount)) * 4));
   }
   chatState.characters[female] = next;
   return { applied: true, message: `bsAddSperm applied to ${female}.` };
@@ -4337,7 +3959,7 @@ function applySetMenstrualPhases(chatState, args) {
   if (!female || !character) return { applied: false, message: `bsSetMenstrualPhases skipped: unknown character ${female || '(empty)'}.` };
   if (!stage) return { applied: false, message: 'bsSetMenstrualPhases skipped: empty stage.' };
 
-  const allowedStages = new Set([...MENSTRUAL_STAGES, '产后恢复', '假孕期', '哺乳期']);
+  const allowedStages = new Set([...MENSTRUAL_STAGES, '产后恢复', '哺乳期']);
   if (!allowedStages.has(stage)) {
     return { applied: false, message: `bsSetMenstrualPhases skipped: invalid stage ${stage}.` };
   }
@@ -4386,23 +4008,10 @@ function applySetMenstrualPhases(chatState, args) {
     metabolism.milk = 0;
     profile.metabolism = metabolism;
   }
-  if (stage === '排卵期') {
-    profile.cooldown = {
-      ...cooldown,
-      orgasmOvulationUsed: false,
-    };
-  } else {
-    profile.cooldown = {
-      ...cooldown,
-      orgasmOvulationUsed: shouldResetOrgasmOvulation(stage) ? false : Boolean(cooldown.orgasmOvulationUsed),
-      naturalOvulationUsed: false,
-    };
-  }
-
-  if (stage === '假孕期') {
-    pregnant.pregnantDays = 0;
-    pregnant.effectivePregnantDays = 0;
-  }
+  profile.cooldown = {
+    ...cooldown,
+    naturalOvulationUsed: false,
+  };
 
   profile.base = base;
   profile.pregnant = pregnant;
@@ -4609,65 +4218,6 @@ function applyDebugClearContainers(chatState, args) {
   return { applied: true, message: `bsDebugClearContainers cleared pre-implantation conception for ${female}.` };
 }
 
-function applyDebugSetGestationModifier(chatState, args) {
-  const female = String(args?.female || '').trim();
-  const character = chatState.characters?.[female];
-  const clear = Boolean(args?.clear);
-  if (!female || !character) return { applied: false, message: `bsDebugSetGestationModifier skipped: unknown character ${female || '(empty)'}.` };
-
-  const next = cloneValue(character);
-  const profile = next.profile || {};
-  const bio = profile.bio || {};
-  const notify = profile.notify || {};
-  const stage = String(profile?.base?.stage || '');
-  const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
-  const runtimeBaseSpeed = Number(next.runtime?.originalPregnancyBio?.gestationSpeciesSpeed);
-  const baseSpeed = clampNumber(
-    Number.isFinite(runtimeBaseSpeed) && runtimeBaseSpeed > 0 ? runtimeBaseSpeed : getGestationSpeciesSpeed(profile),
-    0.1,
-    20,
-    1.0,
-  );
-
-  bio.gestationSpeciesSpeed = baseSpeed;
-  if (clear) {
-    bio.gestationModifierMultiplier = 1.0;
-    bio.gestationModifierName = '';
-    bio.gestationModifierDescription = '';
-  } else {
-    const name = String(args?.name || '').trim();
-    const description = String(args?.description || '').trim();
-    const multiplier = clampNumber(args?.multiplier, 0, 20, 1.0);
-    if (!name) return { applied: false, message: `bsDebugSetGestationModifier skipped for ${female}: empty name.` };
-    bio.gestationModifierMultiplier = multiplier;
-    bio.gestationModifierName = name;
-    bio.gestationModifierDescription = description;
-  }
-
-  bio.gestationEffectiveSpeed = clampNumber(getGestationEffectiveSpeed({ ...profile, bio }), 0, 20, baseSpeed);
-  profile.bio = bio;
-
-  if (fetuses.length > 0 && isPregnancyStage(stage)) {
-    applyPregnancyPhysiology(profile, next.runtime || {});
-  }
-
-  profile.notify = {
-    ...notify,
-    firstly: clear
-      ? `${female}失去了妊娠变速效果`
-      : `${female}获得了妊娠变速效果「${bio.gestationModifierName}」x${Number(bio.gestationModifierMultiplier || 0).toFixed(2)}`,
-    secondly: clear
-      ? `${female}的妊娠变速效果已被清除`
-      : Number(bio.gestationModifierMultiplier || 0) === 0
-        ? `${female}的胎儿发育已被冻结`
-        : `${female}当前妊娠变速倍率为 x${Number(bio.gestationModifierMultiplier || 0).toFixed(2)}`,
-  };
-
-  next.profile = profile;
-  chatState.characters[female] = syncCharacterStageFromProfile(next);
-  return { applied: true, message: `bsDebugSetGestationModifier applied to ${female}.` };
-}
-
 function applyDebugFetalActivity(chatState, args) {
   const female = String(args?.female || '').trim();
   const activityText = String(args?.activityText || '').trim().slice(0, 500);
@@ -4760,7 +4310,6 @@ export function applyToolCall(chatState, call) {
   if (name === 'bsMaternalFetalInteraction') return applyMaternalFetalInteraction(chatState, args);
   if (name === 'bsDebugInjectPregnancy') return applyDebugInjectPregnancy(chatState, args);
   if (name === 'bsDebugClearContainers') return applyDebugClearContainers(chatState, args);
-  if (name === 'bsDebugSetGestationModifier') return applyDebugSetGestationModifier(chatState, args);
   if (name === 'bsDebugFetalActivity') return applyDebugFetalActivity(chatState, args);
   if (name === 'bsDebugSetProdromal') return applyDebugSetProdromal(chatState, args);
   return { applied: false, message: `Unsupported tool: ${name}` };

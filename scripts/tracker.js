@@ -1,7 +1,7 @@
 import { callOpenAICompatible, resolveOverallDeadlineMs } from './api.js';
 import { buildMainFlowStatePrompt, buildTrackerSystemPrompt } from './tracker_prompt_context.js';
 import { DEFAULT_WEAR_STATE, sanitizeWearState } from './wardrobe_config.js';
-import { applyToolCallsResult, isFetusKnownToCharacter, TOOL_DEFINITIONS } from './tools.js';
+import { applyToolCallsResult, TOOL_DEFINITIONS } from './tools.js';
 import {
   buildRecentMessages,
   buildSignature,
@@ -597,7 +597,7 @@ function buildPromptFacingCharacterState(item, diaryLimit = 0) {
       ...(hasFetuses ? { nutrition: Number.isFinite(Number(pregnant.nutrition)) ? Number(pregnant.nutrition) : 0 } : {}),
       ...(hasFetuses ? { symptomReliefPending: Number.isFinite(Number(pregnant.symptomReliefPending)) ? Number(pregnant.symptomReliefPending) : 0 } : {}),
       ...getPromptFacingMetabolismSymptoms(pregnant),
-      fetuses: pregnant.fetuses.filter(isFetusKnownToCharacter).map((fetus) => {
+      fetuses: pregnant.fetuses.map((fetus) => {
         const { embryoId: _embryoId, fusionCheckedWith: _fusionCheckedWith, ...visibleFetus } = fetus;
         return {
           ...visibleFetus,
@@ -674,7 +674,7 @@ function buildOffscreenCharacterState(item, diaryLimit = 0) {  const profile = i
           pregnantDays: pregnant.pregnantDays ?? 0,
           effectivePregnantDays: pregnant.effectivePregnantDays ?? 0,
           ...getPromptFacingLaborState(base, pregnant),
-          fetusesCount: hasFetuses ? pregnant.fetuses.filter(isFetusKnownToCharacter).length : 0,
+          fetusesCount: hasFetuses ? pregnant.fetuses.length : 0,
           ...getPromptFacingMetabolismSymptoms(pregnant),
         },
       } : {}),

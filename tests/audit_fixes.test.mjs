@@ -44,32 +44,6 @@ test('bsAddSperm 负 amount 被拒绝且不改性行为字段', () => {
   assert.equal(cs.characters.F.profile.base.sperms[0].value, 20);
 });
 
-test('bsChildbirth 妊娠阶段允许，假孕期被拒绝', () => {
-  for (const stage of ['孕早期', '逾期']) {
-    const cs = makeChatState(makeCharacter({
-      base: { stage, days: 1, race: '人类' },
-      pregnant: { fetuses: [makeFetus()], fetusesCount: 1 },
-    }));
-    const result = applyToolCall(cs, { name: 'bsChildbirth', arguments: { female: 'F' } });
-    assert.equal(result.applied, true, `stage=${stage} 应允许手术分娩`);
-  }
-  const cs = makeChatState(makeCharacter({
-    base: { stage: '假孕期', days: 1, race: '人类' },
-    pregnant: { fetuses: [makeFetus()], fetusesCount: 1 },
-  }));
-  const result = applyToolCall(cs, { name: 'bsChildbirth', arguments: { female: 'F' } });
-  assert.equal(result.applied, false, '假孕期不允许手术分娩');
-});
-
-test('bsAbortion 假孕期无胎儿被拒绝，不记流产经验', () => {
-  const cs = makeChatState(makeCharacter({ base: { stage: '假孕期', days: 2, race: '人类' } }));
-  const result = applyToolCall(cs, { name: 'bsAbortion', arguments: { female: 'F' } });
-  assert.equal(result.applied, false);
-  assert.match(result.message, /bsSetMenstrualPhases/);
-  assert.notEqual(cs.characters.F.profile.base.stage, '产后恢复');
-  assert.notEqual(cs.characters.F.profile.experience.miscarriageExperience, 1);
-});
-
 test('bsSetCharacterPresence 缺 isPresent 被拒绝，显式传入正常', () => {
   const cs = makeChatState();
   const rejected = applyToolCall(cs, { name: 'bsSetCharacterPresence', arguments: { female: 'F' } });
@@ -82,7 +56,7 @@ test('bsSetCharacterPresence 缺 isPresent 被拒绝，显式传入正常', () =
 test('性欲下降不触发泌乳，上升才触发', () => {
   const cs = makeChatState(makeCharacter({
     base: { stage: '产后恢复', days: 1, race: '人类', libido: 20 },
-    profile: { metabolism: { milk: 10, excretion: 0, hunger: 0, sleep: 0, odor: 0, companionship: 0 } },
+    profile: { metabolism: { milk: 10, excretion: 0, hunger: 0, sleep: 0, companionship: 0 } },
   }));
   applyToolCall(cs, { name: 'bsUpdateCharacterStatus', arguments: { female: 'F', options: { libido: -5 } } });
   assert.equal(cs.characters.F.profile.metabolism.milk, 10, '负性欲不应泌乳');

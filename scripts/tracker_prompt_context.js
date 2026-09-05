@@ -1,24 +1,6 @@
 import { PSY_MENS_FIELDS, PSY_PREG_FIELDS } from './registry_psy_config.js';
-import { deriveFetusTags, describeFetusTags } from './fetus_tags.js';
 import { buildHormoneContextBlock, describeHormonePhases } from './hormone_context.js';
 import { LABOR_STAGES, PREGNANCY_STAGES } from './stage_config.js';
-
-/** 本轮 payload 里真的出现过的胎儿标签；没出现的标签不必浪费 token 去解释 */
-function collectRelevantFetusTags(payload = {}) {
-  const found = new Set();
-  const state = payload?.existing_state;
-  if (!state || typeof state !== 'object') return [];
-  for (const [name, item] of Object.entries(state)) {
-    const carrierName = item?.name || name;
-    const profile = item?.profile || {};
-    const fetuses = Array.isArray(profile?.pregnant?.fetuses) ? profile.pregnant.fetuses : [];
-    const children = Array.isArray(profile?.children) ? profile.children : [];
-    for (const record of [...fetuses, ...children]) {
-      for (const tag of deriveFetusTags(record, { carrierName })) found.add(tag);
-    }
-  }
-  return [...found];
-}
 
 export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '以下是角色状态变量的语义说明，供你理解 existing_state 中的字段，不是要求你原样输出这些字段。',
@@ -33,7 +15,7 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '',
   '[base]',
   '- isHere: 是否在场。false 时角色仍会随时间推进，但幕外角色只发送少量状态给你。',
-  '- stage: 当前阶段。可能是月经阶段、妊娠阶段、假孕期、产兆前驱、第一/第二/第三产程、产后恢复、哺乳期、围绝经期晚期、停经、无经期、未激活。',
+  '- stage: 当前阶段。可能是月经阶段、妊娠阶段、产兆前驱、第一/第二/第三产程、产后恢复、哺乳期、围绝经期晚期、停经、无经期、未激活。',
   '- 停经/围绝经期晚期是年龄决定的永久阶段：停经后不再有周期与受孕可能；初潮前的角色（年龄 < bio.menarcheAge）处于无经期，同样不可受孕。',
   '- days: 当前阶段已经过了多少天，使用 0 起算的 elapsed/progress 语义；进入新阶段时为 0，超过该阶段上限后才切换下一阶段。',
   '- fertilizationDays: 受精后、着床前已经过的天数；着床等待期以 6 天为基础，并随角色实际月经周期长度等比缩放。',
@@ -52,7 +34,7 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '- stageProgressText / hormonePhase: 系统附带的阶段进度文本与激素阶段键（黄体期分早晚段）；只读，不要写入。',
   '',
   '[pregnant]',
-  '- pregnant 只会在已有 fetuses、妊娠阶段、产兆前驱/产程、产后恢复或假孕期发送；幕外角色发送时只保留少量 pregnant 摘要，并用 fetusesCount 表示胎儿数量。',
+  '- pregnant 只会在已有 fetuses、妊娠阶段、产兆前驱/产程、产后恢复发送；幕外角色发送时只保留少量 pregnant 摘要，并用 fetusesCount 表示胎儿数量。',
   '- pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/本族等价周期起点计算的孕周天数。',
   '- effectivePregnantDays: 真正计入胎儿发育与阶段推进的有效孕龄天数；当妊娠被冻结时，它可以停在原地而 pregnantDays 继续增加。',
   '- laborHours / effectiveLaborHours / laborPhase / laborFetusIndex / laborPain 仅在产兆前驱或正式产程期间发送；产后恢复不再表示分娩疼痛。',
@@ -65,27 +47,17 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '- nutrition: 妊娠供养力盈余/赤字。正值代表供养充足，负值代表供养亏空；每周会参与胎儿体重结算。',
   '- symptomReliefPending: 尚待透过母体安抚胎儿处理的妊娠不适次数；direction=maternal 的普通母胎互动成功时可消耗一次，其随机 affinity 结果为轻微变化时补回 1 点供养力，显著变化时补回 2 点供养力。',
   '- bsMaternalFetalInteraction 的 direction=fetal 表示胎儿对母体的亲近或排斥，须传 change 来改变 affinity，且不会补充供养力；direction=maternal 表示母体安抚胎儿，不传 change，系统会随机决定 affinity 变化，成功时也可依变化强度回补待安抚供养力，产兆前驱时用于分娩抵抗。每名角色每个新小时仅能成功生效一次。',
-  '- blockage: 当日妊娠阻塞状态，格式为 {key, severity}。key 可为 excretion/hunger/sleep/milk/odor/companionship；它会让对应需求的 bsExcreteMetabolism 排解不顺畅。',
+  '- blockage: 当日妊娠阻塞状态，格式为 {key, severity}。key 可为 excretion/hunger/sleep/milk/companionship；它会让对应需求的 bsExcreteMetabolism 排解不顺畅。',
   '- acceleration: 当日妊娠快积状态，格式同 blockage；它会让对应需求更快累积。',
   '- expansion: 当日妊娠扩容状态，格式同 blockage；它会将对应需求上限从 150 扩为 200。blockage、acceleration 与 expansion 不会同时落在同一项需求上。',
   '- fetuses: 胎儿列表。',
   '- fetuses[*].fathers: 父方对象名称。',
-  '- fetuses[*].tags: 系统标注的胎儿来历标签（如 identical），由系统推导或在事件发生当下写入，只读，不要自行增删。本轮出现过的标签会在下方另行说明。',
-  '- fetuses[*].identicalGroup: 同卵分裂的组别编号；带同一编号且 tags 含 identical 的胎儿由同一颗受精卵分裂而来。没有分裂时不出现。',
-  '- fetuses[*].conceivedAtDays: 异期复孕专用——这一胎受精当下的 effectivePregnantDays。该胎自己的孕龄 = effectivePregnantDays 减去这个值，所以同腹胎儿的发育进度可能不同。一般妊娠不出现。',
-  '- 异期复孕的胎儿在进入孕中期之前不会出现在 fetuses 里，也不计入 fetusesCount：角色本人还不知道自己怀了两胎。它在系统里照常发育、照常消耗供养力，所以在揭晓前你会看到供养负担与体感比胎数应有的更重——那是伏笔，可以据此写身体的异样，但不要直接写破「其实有两胎」。揭晓时系统会以 notify 告知。',
   '- fetuses[*].gender: 胎儿性别。',
   '- fetuses[*].weight: 胎重系数，標準1.0，范围0.33~3.0。影响妊娠负担、分娩难度与恢复期。',
   '- fetuses[*].tendencyAngle: 胎位倾向角度，影响孕期/产兆前驱中的调位，以及第二产程胎体下降/娩出的难度；角度映射固定为 0/360=正常头位/正位，180=完全臀位/倒位，90或270=横位，禁止反写；不会阻止第一产程进入第二产程。若 notify 发出难产警示，应优先考虑 bsChildbirth 手术产。',
   '- fetuses[*].tendencyAngleText: 系统额外附带的胎位文字说明，如 正位(头位)/倒位(臀位)/横位/斜位。',
   '- fetuses[*].affinity: 母胎之間的親密度。',
   '- fetuses[*].talents: 胎儿承接的天赋，只含 skillId、带正负号的 level 与 exp；只能由孕体角色的 bsTrainSkill 在允许阶段自动改变。',
-  '',
-  '[bio]',
-  '- bio 只会发送少量允许暴露给 LLM 的字段，不代表完整内部参数表。',
-  '- gestationModifierMultiplier: 妊娠速度倍率。1 为正常，大于 1 为加速，小于 1 为减速；若为 0，则代表胎儿发育冻结。',
-  '- gestationModifierName: 当前妊娠速度修正效果的名称，例如祝福、诅咒、体质、术式。',
-  '- gestationModifierDescription: 对该妊娠速度修正来源与表现的简短说明。',
   '',
   '[experience]',
   '- 记录第一次对象、最近对象、情感/婚姻对象，以及怀孕、分娩、流产等经历次数。',
@@ -95,7 +67,7 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '- psychology 分为 mens (常规/生理) 与 preg (妊娠相关) 两大组心理指数。',
   ...Object.entries(PSY_MENS_FIELDS).map(([k, v]) => `- [mens] ${k} (0-100+): ${v.definition}`),
   ...Object.entries(PSY_PREG_FIELDS).map(([k, v]) => `- [preg] ${k} (0-100+): ${v.definition}`),
-  '- 非怀孕时主要看 psychology.mens；怀孕、假孕、产兆前驱、产程时主要看 psychology.preg。',
+  '- 非怀孕时主要看 psychology.mens；怀孕、产兆前驱、产程时主要看 psychology.preg。',
   '- 心理阶段从 0 到 100+。若要调用 bsUpdatePsychology，数值参数表示变化量(delta)而不是目标值；例如当前 78 传 2 会变成 80，不是设为 2。建议尽量做小幅变化；单次以 ±1 到 ±3 为宜，±5 已属于大改。每名角色在每个新小时内仅允许一次成功心理变化，下一小时前不要重复调用。',
   '- 每个心理项由 *_value 和 *_interpret 组成。*_value 是 0-100 数值本体，*_interpret 是系统对应生成的心理解释。',
   '- psychology.mens 另外包含 isChaste (是否当前保持贞洁)、hasContraception (是否有避孕措施) 两个事件旗标。',
@@ -130,30 +102,27 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '- 角色不在场也可以写日记；可根据角色性格、处境与已知生活状态补足合理的日常幕外感受，但不要把未经剧情支持的重大事件写成既成事实，也不要用日记改写客观状态。',
   '',
   '[metabolism]',
-  '- metabolism 使用 excretion / hunger / sleep / milk / odor / companionship，分别对应泄意、饿意、困意、乳意、臭意、伴意；excretion（泄意）同时包含排尿与排便需求。',
-  '- excretion 会在活力增加时累积；以 bsExcreteMetabolism 处理 hunger（进食）会增加部分泄意与少量困意，处理 sleep（睡眠）会增加少量饿意。milk 代表乳意：普通周期中为乳房胀敏或周期不适，黄体期/月经期会随时间累积，排卵期可因性欲波动少量累积；妊娠、假孕、产后恢复或哺乳期时则涵盖乳胀与泌乳需求（哺乳期需要排乳／哺乳缓解，涨奶不排会持续不适）。odor 代表需要清理的臭意，companionship 代表渴望陪伴或社交的伴意。',
-  '- 时间累积满一周时会进行日常生活结算：基本清洁会清除臭意，日常往来会缓解部分伴意；普通周期进入新一轮卵泡期时，周期型乳意会清零。妊娠、假孕或产后恢复的泌乳型乳意不会因跨周自动清除。',
-  '- 只有剧情确实发生陪伴或社交时，才用 options.companionship 缓解伴意；臭意达到高等级时会降低陪伴缓解效果。伴意解除不额外转化为乳意；乳意仍由周期、妊娠/假孕/产后恢复与性欲波动等既有来源产生。',
+  '- metabolism 使用 excretion / hunger / sleep / milk / companionship，分别对应泄意、饿意、困意、乳意、伴意；excretion（泄意）同时包含排尿与排便需求。',
+  '- excretion 会在活力增加时累积；以 bsExcreteMetabolism 处理 hunger（进食）会增加部分泄意与少量困意，处理 sleep（睡眠）会增加少量饿意。milk 代表乳意：普通周期中为乳房胀敏或周期不适，黄体期/月经期会随时间累积，排卵期可因性欲波动少量累积；妊娠、产后恢复或哺乳期时则涵盖乳胀与泌乳需求（哺乳期需要排乳／哺乳缓解，涨奶不排会持续不适）。companionship 代表渴望陪伴或社交的伴意。',
+  '- 时间累积满一周时会进行日常生活结算：日常往来会缓解部分伴意；普通周期进入新一轮卵泡期时，周期型乳意会清零。妊娠或产后恢复的泌乳型乳意不会因跨周自动清除。',
+  '- 只有剧情确实发生陪伴或社交时，才用 options.companionship 缓解伴意。伴意解除不额外转化为乳意；乳意仍由周期、妊娠/产后恢复与性欲波动等既有来源产生。',
   '- pregnant.blockage 表示阻塞症状，会降低对应需求的解除效果：',
   '  - excretion: 便秘。',
   '  - hunger: 孕吐恶心、消化不良。',
   '  - milk: 乳房胀痛、敏感。',
   '  - sleep: 失眠。',
-  '  - odor: 阴道分泌物增生。',
   '  - companionship: 社交回避。',
   '- pregnant.acceleration 表示快积症状，会加快对应需求累积，也会让刚被缓解的需求较快回升：',
   '  - excretion: 频尿。',
   '  - hunger: 容易饿、奇特饮食偏好。',
   '  - milk: 乳意快升、溢乳。',
   '  - sleep: 晕眩、嗜睡。',
-  '  - odor: 体温升高、容易排汗。',
   '  - companionship: 黏人。',
   '- pregnant.expansion 表示扩容症状，会使对应需求可承受量从 150 提高到 200，因而需要更多解除量才能排净：',
   '  - excretion: 水肿、肠道慢蠕动，排出的量较少。',
   '  - hunger: 养分母体优先，但使胎儿活动降低。',
   '  - milk: 胸部变得沉重饱满，不同于阻塞的压迫疼敏。',
   '  - sleep: 激素使精力旺盛，但属于代偿。',
-  '  - odor: 孕妇特有的香气掩盖了需要清理的不适。',
   '  - companionship: 胎儿带来内在陪伴感，可以忍受更长的孤独。',
   '',
   '[wardrobe / outfit]',
@@ -213,17 +182,12 @@ function buildTrackerMetabolismGuide(payload = null) {
       .replace('、psychology', '')
       .replace(/\n?\[psychology\][\s\S]*?\n\[skills \/ talents\]/, '\n[skills / talents]');
   }
-  // 只解释本轮真的出现过的标签：没用到就不占 token
-  const fetusTagLines = describeFetusTags(collectRelevantFetusTags(payload || {}));
-  if (fetusTagLines.length > 0) {
-    baseGuide += ['', '', '[本轮出现的胎儿标签]', ...fetusTagLines].join('\n');
-  }
   return baseGuide;
 }
 
 // 妊娠相关阶段中 pregnantDescription 仍为空的在场角色：需要注入初始化规范，
 // 否则「不要新增描述子字段」规则会把空栏位永久锁死。
-const PREGNANT_DESCRIPTION_STAGES = new Set([...PREGNANCY_STAGES, '产兆前驱', ...LABOR_STAGES, '产后恢复', '假孕期']);
+const PREGNANT_DESCRIPTION_STAGES = new Set([...PREGNANCY_STAGES, '产兆前驱', ...LABOR_STAGES, '产后恢复']);
 
 function collectPregnantDescriptionInitNames(payload = {}) {
   const names = [];
@@ -322,12 +286,6 @@ export function buildMainFlowStatePrompt(payload = {}) {
   const existingState = payload?.existing_state && typeof payload.existing_state === 'object' ? payload.existing_state : {};
   const hasState = Object.keys(existingState).length > 0;
   if (!hasState) return '';
-  // 特殊来历的胎儿只丢一串 tags 给主线模型，它无从判断该怎么写。
-  // 只解释本轮真的出现过的标签，没出现就不占 token。
-  const fetusTagLines = describeFetusTags(collectRelevantFetusTags(payload || {}));
-  const fetusTagBlock = fetusTagLines.length > 0
-    ? ['', '[本轮出现的特殊胎儿来历]', ...fetusTagLines].join('\n')
-    : '';
   return [
     '<bs_biotracker>',
     '[并行生理追踪上下文]',
@@ -339,7 +297,6 @@ export function buildMainFlowStatePrompt(payload = {}) {
     serializeStateForPrompt(existingState),
     '',
     buildHormoneContextBlock(payload || {}),
-    fetusTagBlock,
     '</bs_biotracker>',
   ].filter((part) => part !== '').join('\n');
 }

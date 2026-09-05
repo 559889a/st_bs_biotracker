@@ -23,8 +23,6 @@ import {
 } from './scripts/stage_config.js';
 import { buildMainFlowPrompt, resetPoller, runTracker } from './scripts/tracker.js';
 import { buildLineageView, relatedNodeIds } from './scripts/lineage_view.js';
-import { deriveFetusTags, getFetusTagLabels } from './scripts/fetus_tags.js';
-import { isFetusKnownToCharacter } from './scripts/tools.js';
 import { applyToolCall } from './scripts/tools.js';
 import { appendSkillHistory, getTalentLabel, normalizeTalentList, removeSkillDefinition, requiredExp, resolveSkillDefinition, SKILL_MAX_LEVEL, TALENT_MAX_LEVEL } from './scripts/skill_config.js';
 import {
@@ -147,12 +145,6 @@ let debugInjectDraft = {
   fetusCount: '1',
   genders: '女',
   equivalentDays: '0',
-};
-let debugGestationModifierDraft = {
-  owner: '',
-  name: '',
-  multiplier: '',
-  description: '',
 };
 let debugFetalActivityDraft = {
   owner: '',
@@ -817,40 +809,6 @@ function renderRegisterChildSourceOptions(ctx) {
   syncRegisterChildSourceFields(ctx);
 }
 
-/**
- * 注册页「特殊胎儿来历」的勾选。
- *
- * 每一项都是一个勾选盒，勾了只转成提示词（原「直接写入」的胎内回归/代孕
- * 已随纯爱化改造移除）。一项都没勾时回传 null，让注册路径跟以前完全一样。
- */
-function getSpecialFetusRequest() {
-  const hints = Array.from(document.querySelectorAll('[data-special-hint]'))
-    .filter((input) => input.checked)
-    .map((input) => String(input.getAttribute('data-special-hint') || ''))
-    .filter(Boolean);
-  if (hints.length === 0) return { request: null, error: '' };
-  return { request: { hints }, error: '' };
-}
-
-/** 注册完成后回头看勾的特殊来历有没有真的落到胎儿身上，没有就回一句提醒 */
-function describeMissingSpecialFetus(request, character) {
-  if (!request) return '';
-  const fetuses = character?.profile?.pregnant?.fetuses;
-  if (!Array.isArray(fetuses) || fetuses.length === 0) return '注意：本次注册没有产生妊娠，勾选的特殊胎儿来历未套用。';
-  const missing = [];
-  const has = (predicate) => fetuses.some(predicate);
-  const hintChecks = {
-    identical: (item) => Array.isArray(item?.tags) && item.tags.includes('identical'),
-    superfetation: (item) => Array.isArray(item?.tags) && item.tags.includes('superfetation'),
-  };
-  const hintLabels = { identical: '同卵双胞胎', superfetation: '异期复孕' };
-  for (const key of Array.isArray(request.hints) ? request.hints : []) {
-    if (hintChecks[key] && !has(hintChecks[key])) missing.push(hintLabels[key]);
-  }
-  if (missing.length === 0) return '';
-  return `注意：模型没有实现 ${missing.join('、')}，可重跑一次注册。`;
-}
-
 function getRegisterFormValues(ctx = getContextSafe()) {
   const sourceChildKey = String(document.getElementById('bs-bt-register-source')?.value || '');
   const rawTargetName = String(document.getElementById('bs-bt-register-name')?.value || '').trim();
@@ -858,7 +816,6 @@ function getRegisterFormValues(ctx = getContextSafe()) {
     targetName: resolveRegistryTargetName(ctx, rawTargetName),
     rawTargetName,
     customNotes: String(document.getElementById('bs-bt-register-custom-notes')?.value || '').trim(),
-    specialFetus: getSpecialFetusRequest(),
     breedingInferencePrompt: String(document.getElementById('bs-bt-breeding-inference-prompt')?.value || '').trim(),
     skillPrompt: String(document.getElementById('bs-bt-register-skill-prompt')?.value || '').trim(),
     sourceChildKey,
@@ -2442,9 +2399,6 @@ function buildTrackCharacterViewModel(character) {
   const outfitView = buildOutfitView(profile);
   const immune = profile.immune || {};
   const bio = profile.bio || {};
-  const gestationSpeciesSpeed = getGestationSpeciesSpeed(profile);
-  const gestationEffectiveSpeed = getGestationEffectiveSpeed(profile);
-  const gestationModifierMultiplier = Number.isFinite(Number(bio.gestationModifierMultiplier)) ? Number(bio.gestationModifierMultiplier) : 1;
   const stage = String(base.stage || '未设定');
   const totalSperm = (Array.isArray(base.sperms) ? base.sperms : []).reduce((sum, item) => sum + (Number(item?.value) || 0), 0);
   return {
@@ -2491,24 +2445,14 @@ function buildTrackCharacterViewModel(character) {
       prodromalRemainingHours: Number(pregnant.prodromalRemainingHours) || 0,
       prodromalDelayProgressHours: Number(pregnant.prodromalDelayProgressHours) || 0,
       amnionDurability: Number(pregnant.amnionDurability) || 0,
-      // 未揭晓的异期胎在追踪页也藏起来，与提示词一致；完整变量页仍看得到
-      fetuses: Array.isArray(pregnant.fetuses) ? pregnant.fetuses.filter(isFetusKnownToCharacter).map((fetus) => ({
+      fetuses: Array.isArray(pregnant.fetuses) ? pregnant.fetuses.map((fetus) => ({
         ...fetus,
-        // 标签在这里解析：推导需要承载者名字，渲染层拿不到
-        tagLabels: getFetusTagLabels(deriveFetusTags(fetus, { carrierName: character?.name || '' })),
         talents: (Array.isArray(fetus?.talents) ? fetus.talents : []).map(enrichTalent),
       })) : [],
       pregnantBlocks: parseDescriptionBlocks(descriptions.pregnantDescription),
       showPregnantFields: isPregnantStage(stage),
       showLaborFields: LABOR_STAGES.includes(stage),
       showLaborPainBadge: stage === '产兆前驱' || LABOR_STAGES.includes(stage),
-      gestationModifier: {
-        name: String(bio.gestationModifierName || '').trim(),
-        multiplier: gestationModifierMultiplier,
-        description: String(bio.gestationModifierDescription || '').trim(),
-        effectiveSpeed: gestationEffectiveSpeed,
-        speciesSpeed: gestationSpeciesSpeed,
-      },
     },
     experience: {
       items: [
@@ -2544,13 +2488,6 @@ function buildTrackCharacterViewModel(character) {
         realisticLabor: Boolean(immune.realisticLabor),
       },
       isHere: base.isHere !== false,
-      gestationModifier: {
-        name: String(bio.gestationModifierName || '').trim(),
-        multiplier: gestationModifierMultiplier,
-        description: String(bio.gestationModifierDescription || '').trim(),
-        effectiveSpeed: gestationEffectiveSpeed,
-        speciesSpeed: gestationSpeciesSpeed,
-      },
       counts: {
         sperms: Array.isArray(base.sperms) ? base.sperms.length : 0,
         fetuses: Array.isArray(pregnant.fetuses) ? pregnant.fetuses.length : 0,
@@ -2791,16 +2728,8 @@ function renderSpermShareChart(sperms) {
 }
 
 /** 胎儿标签列：没有标签就整列不出现，一般妊娠不会多一行空的 */
-function renderFetusTagRow(fetus) {
-  const labels = Array.isArray(fetus?.tagLabels) ? fetus.tagLabels : [];
-  if (labels.length === 0) return '';
-  const chips = labels.map((label) => `<span class="bs-bt-fetus-tag">${escapeHtml(label)}</span>`).join('');
-  return `<div class="bs-bt-fetus-tags">${chips}</div>`;
-}
-
 function renderTrackPregnancy(viewModel) {
   const data = viewModel.pregnancy;
-  const gestationModifier = data.gestationModifier || {};
   const fertilityBadge = data.showPregnantFields
     ? '已怀孕'
     : (Number(data.eggs) > 0 || Number(data.fertilizationDays) > 0 || (Array.isArray(data.fetuses) && data.fetuses.length > 0))
@@ -2816,20 +2745,7 @@ function renderTrackPregnancy(viewModel) {
       sectionStyle: `--bsbt-amnion-ratio:${amnionDurability / 100};`,
     }
     : {};
-  const hasGestationModifier = Boolean(
-    String(gestationModifier.name || '').trim()
-    || String(gestationModifier.description || '').trim()
-    || Math.abs(Number(gestationModifier.multiplier ?? 1) - 1) > 0.000001,
-  );
   return `
-    ${hasGestationModifier ? `<div class="bs-bt-track-section">
-      <div class="bs-bt-track-section-title">妊娠变速效果</div>
-      <div class="bs-bt-track-meta">
-        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">效果名称</span><span class="bs-bt-track-meta-value">${escapeHtml(gestationModifier.name || '无')}</span></div>
-        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">当前倍率</span><span class="bs-bt-track-meta-value">${Number(gestationModifier.multiplier || 0).toFixed(3)}x</span></div>
-        <div class="bs-bt-track-meta-row"><span class="bs-bt-track-meta-label">说明</span><span class="bs-bt-track-meta-value">${escapeHtml(gestationModifier.description || '无')}</span></div>
-      </div>
-    </div>` : ''}
     ${renderCardCarouselSection(
       '精液来源',
       data.sperms,
@@ -2848,7 +2764,6 @@ function renderTrackPregnancy(viewModel) {
         data.fetuses,
         (item, index) => `<div class="bs-bt-track-card">
                 <div class="bs-bt-track-card-title">胎儿 ${index + 1}</div>
-                ${renderFetusTagRow(item)}
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">父方姓名</span><span class="bs-bt-track-list-value">${escapeHtml(item?.fathers || '未知')}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">性别</span><span class="bs-bt-track-list-value">${escapeHtml(item?.gender || '未知')}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">体重倍率</span><span class="bs-bt-track-list-value">${escapeHtml(formatFixedDisplay(item?.weight, 2))}</span></div>
@@ -3248,7 +3163,6 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
   const isHere = viewModel.debug?.isHere !== false;
   const counts = viewModel.debug?.counts || {};
   const hasConceptionState = Boolean(viewModel.debug?.hasConceptionState);
-  const gestationModifier = viewModel.debug?.gestationModifier || {};
   const currentStage = viewModel.base?.stage || '';
   const currentBlockageKey = String(viewModel.debug?.blockage?.key || '');
   const currentAccelerationKey = String(viewModel.debug?.acceleration?.key || '');
@@ -3292,10 +3206,6 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
   const countValue = escapeHtml(debugInjectDraft.fetusCount || '1');
   const gendersValue = escapeHtml(debugInjectDraft.genders || '女');
   const daysValue = escapeHtml(debugInjectDraft.equivalentDays || '0');
-  const modifierDraftActive = debugGestationModifierDraft.owner === selectedTrackName;
-  const modifierNameValue = escapeHtml(modifierDraftActive ? debugGestationModifierDraft.name : (gestationModifier.name || ''));
-  const modifierMultiplierValue = escapeHtml(modifierDraftActive ? debugGestationModifierDraft.multiplier : String(gestationModifier.multiplier ?? 1));
-  const modifierDescriptionValue = escapeHtml(modifierDraftActive ? debugGestationModifierDraft.description : (gestationModifier.description || ''));
   const fetalActivityTextValue = escapeHtml(debugFetalActivityDraft.owner === selectedTrackName ? debugFetalActivityDraft.text : '');
   return `
     <div class="bs-bt-track-section">
@@ -3423,28 +3333,6 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
       <div class="bs-bt-track-debug-hint">${canTriggerFetalActivity ? '内容会追加写入 secondly，作为下一段故事可自然承接的胎儿活动事件。' : '只有已有胎儿且仍在妊娠或产程中的角色可以触发。'}</div>
     </div>
     ${fetalTalentHtml}
-    <div class="bs-bt-track-section" style="margin-top: 10px;">
-      <div class="bs-bt-track-section-title">妊娠变速效果</div>
-      <fieldset class="bs-bt-track-debug-form">
-        <label class="bs-bt-track-debug-field">
-          <span class="bs-bt-track-debug-label">效果名称</span>
-          <input id="bs-bt-debug-gestation-name" class="text_pole" type="text" value="${modifierNameValue}" placeholder="例如：地母神的祝福" />
-        </label>
-        <label class="bs-bt-track-debug-field">
-          <span class="bs-bt-track-debug-label">倍率</span>
-          <input id="bs-bt-debug-gestation-multiplier" class="text_pole" type="number" min="0" max="20" step="0.1" value="${modifierMultiplierValue}" />
-        </label>
-        <label class="bs-bt-track-debug-field">
-          <span class="bs-bt-track-debug-label">说明</span>
-          <textarea id="bs-bt-debug-gestation-description" class="text_pole bs-bt-textarea" rows="3" placeholder="例如：地母神赐与女性冒险者的祝福，使妊娠速度变为 0.5 倍；若倍率为 0，则代表胎儿发育冻结">${modifierDescriptionValue}</textarea>
-        </label>
-        <div class="bs-bt-track-inline-action bs-bt-track-inline-action-equal">
-          <button type="button" class="menu_button bs-bt-inline-button" data-debug-action="set-gestation-modifier">应用效果</button>
-          <button type="button" class="menu_button bs-bt-inline-button" data-debug-action="clear-gestation-modifier">清除效果</button>
-        </div>
-      </fieldset>
-      <div class="bs-bt-track-debug-hint">当前倍率 ${Number(gestationModifier.multiplier || 0).toFixed(3)}x，物种妊娠速度 ${Number(gestationModifier.speciesSpeed || 1).toFixed(3)}，当前生效速度 ${Number(gestationModifier.effectiveSpeed || 0).toFixed(3)}。倍率为 0 代表胎儿发育冻结。</div>
-    </div>
   `;
 }
 
@@ -3535,52 +3423,6 @@ function injectSelectedTrackPregnancy(ctx) {
   renderStatusPanel(ctx);
   renderFullStatePage(ctx);
   globalThis.toastr?.success?.(`[BS BioTracker] 已为 ${selectedTrackName} 注入调试妊娠状态`);
-}
-
-function applySelectedTrackGestationModifier(ctx, clear = false) {
-  if (!selectedTrackName) return;
-  const settings = getSettings(ctx);
-  const chatState = getChatState(ctx, settings);
-  const name = String(document.getElementById('bs-bt-debug-gestation-name')?.value || '').trim();
-  const multiplier = String(document.getElementById('bs-bt-debug-gestation-multiplier')?.value || '').trim();
-  const description = String(document.getElementById('bs-bt-debug-gestation-description')?.value || '').trim();
-  debugGestationModifierDraft = {
-    owner: selectedTrackName,
-    name,
-    multiplier,
-    description,
-  };
-  const result = applyToolCall(chatState, {
-    name: 'bsDebugSetGestationModifier',
-    arguments: {
-      female: selectedTrackName,
-      clear,
-      name,
-      multiplier: Number(multiplier || 1),
-      description,
-    },
-  });
-  if (!result?.applied) {
-    globalThis.toastr?.warning?.(result?.message || '[BS BioTracker] 妊娠变速效果设置失败');
-    return;
-  }
-  if (clear) {
-    debugGestationModifierDraft = {
-      owner: selectedTrackName,
-      name: '',
-      multiplier: '',
-      description: '',
-    };
-  }
-  recordChatStateSnapshot(ctx, chatState, { reason: clear ? 'debug_clear_gestation_modifier' : 'debug_set_gestation_modifier' });
-  saveSettings(ctx);
-  renderStatusPanel(ctx);
-  renderFullStatePage(ctx);
-  globalThis.toastr?.success?.(
-    clear
-      ? `[BS BioTracker] 已清除 ${selectedTrackName} 的妊娠变速效果`
-      : `[BS BioTracker] 已为 ${selectedTrackName} 设置妊娠变速效果`,
-  );
 }
 
 function setSelectedTrackProdromal(ctx, progressPercent) {
@@ -3788,16 +3630,6 @@ function bindDebugPanelControls(ctx, root, refresh = () => renderFullStatePage(c
       toggleSelectedTrackPresence(ctx);
     }),
   );
-  root.querySelectorAll('[data-debug-action="set-gestation-modifier"]').forEach((node) =>
-    node.addEventListener('click', () => {
-      applySelectedTrackGestationModifier(ctx, false);
-    }),
-  );
-  root.querySelectorAll('[data-debug-action="clear-gestation-modifier"]').forEach((node) =>
-    node.addEventListener('click', () => {
-      applySelectedTrackGestationModifier(ctx, true);
-    }),
-  );
   root.querySelectorAll('[data-debug-action="set-prodromal"]').forEach((node) =>
     node.addEventListener('click', () => {
       const progressPercent = root.querySelector('#bs-bt-debug-prodromal-progress')?.value || '0';
@@ -3873,18 +3705,6 @@ function bindDebugPanelControls(ctx, root, refresh = () => renderFullStatePage(c
   root.querySelector('#bs-bt-debug-fetal-activity')?.addEventListener('input', (event) => {
     debugFetalActivityDraft.owner = selectedTrackName;
     debugFetalActivityDraft.text = String(event.target?.value || '');
-  });
-  root.querySelector('#bs-bt-debug-gestation-name')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.name = String(event.target?.value || '');
-  });
-  root.querySelector('#bs-bt-debug-gestation-multiplier')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.multiplier = String(event.target?.value || '');
-  });
-  root.querySelector('#bs-bt-debug-gestation-description')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.description = String(event.target?.value || '');
   });
 }
 
@@ -4036,16 +3856,6 @@ function renderStatusPanel(ctx) {
       injectSelectedTrackPregnancy(ctx);
     }),
   );
-  content.querySelectorAll('[data-debug-action="set-gestation-modifier"]').forEach((node) =>
-    node.addEventListener('click', () => {
-      applySelectedTrackGestationModifier(ctx, false);
-    }),
-  );
-  content.querySelectorAll('[data-debug-action="clear-gestation-modifier"]').forEach((node) =>
-    node.addEventListener('click', () => {
-      applySelectedTrackGestationModifier(ctx, true);
-    }),
-  );
   content.querySelectorAll('[data-debug-action="set-blockage"]').forEach((node) =>
     node.addEventListener('click', () => {
       const key = content.querySelector('#bs-bt-debug-blockage-select')?.value || '';
@@ -4120,18 +3930,6 @@ function renderStatusPanel(ctx) {
   content.querySelector('#bs-bt-debug-fetal-activity')?.addEventListener('input', (event) => {
     debugFetalActivityDraft.owner = selectedTrackName;
     debugFetalActivityDraft.text = String(event.target?.value || '');
-  });
-  content.querySelector('#bs-bt-debug-gestation-name')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.name = String(event.target?.value || '');
-  });
-  content.querySelector('#bs-bt-debug-gestation-multiplier')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.multiplier = String(event.target?.value || '');
-  });
-  content.querySelector('#bs-bt-debug-gestation-description')?.addEventListener('input', (event) => {
-    debugGestationModifierDraft.owner = selectedTrackName;
-    debugGestationModifierDraft.description = String(event.target?.value || '');
   });
 }
 
@@ -6250,29 +6048,13 @@ async function ensureModal(ctx) {
       globalThis.toastr?.error?.(message, '[BS BioTracker]');
     }
   });
-  // 勾了才展开该项的设定，收起来时六项就只是一份可读的清单
-  document.querySelector('.bs-bt-special-fetus')?.addEventListener('change', (event) => {
-    const toggle = event.target;
-    if (!(toggle instanceof HTMLInputElement)) return;
-    const key = String(toggle.getAttribute('data-special-toggle') || '');
-    if (!key) return;
-    const body = document.querySelector(`[data-special-body="${key}"]`);
-    if (body) body.hidden = !toggle.checked;
-    if (toggle.checked) body?.querySelector('input')?.focus();
-  });
   document.getElementById('bs-bt-register-run')?.addEventListener('click', async () => {
     // 注册没有节流会重复发送：小手机关掉再打开时按钮看似可点，实际上上一轮还在跑
     if (isRegistryOperationPending('register')) {
       globalThis.toastr?.info?.('[BS BioTracker] 注册请求正在进行中，请等待完成');
       return;
     }
-    const { targetName, customNotes, sourceChild, specialFetus } = getRegisterFormValues();
-    if (specialFetus?.error) {
-      setRegisterStatus(specialFetus.error, true);
-      globalThis.toastr?.warning?.(specialFetus.error, '[BS BioTracker]');
-      return;
-    }
-    const specialFetusRequest = specialFetus?.request || null;
+    const { targetName, customNotes, sourceChild } = getRegisterFormValues();
     if (!targetName) {
       setRegisterStatus('请先输入要注册的角色名。', true);
       globalThis.toastr?.warning?.('[BS BioTracker] 请先输入角色名');
@@ -6293,7 +6075,7 @@ async function ensureModal(ctx) {
       ? `正在使用繁育推演注册 ${targetName}...`
       : `正在注册 ${targetName}...`);
     try {
-      const character = await runRegistry(ctx, { targetName, customNotes, breedingInference, sourceChild, specialFetus: specialFetusRequest });
+      const character = await runRegistry(ctx, { targetName, customNotes, breedingInference, sourceChild });
       renderStatusPanel(ctx);
       renderFullStatePage(ctx);
       renderSkillCatalogPage(ctx);
@@ -6301,8 +6083,6 @@ async function ensureModal(ctx) {
       updateMainFlowPrompt(ctx);
       // 角色已经注册进去了，这份推演草稿才算用完，可以清空
       clearBreedingInferenceDraftFor(character.name);
-      // 勾了特殊来历却没产生妊娠时要讲出来：默默当成功，玩家会以为设定生效了
-      const missingSpecial = describeMissingSpecialFetus(specialFetusRequest, character);
       setRegisterStatus([
         breedingInference
           ? `注册完成：${character.name}（已套用繁育推演）。可继续备装或写日记。`

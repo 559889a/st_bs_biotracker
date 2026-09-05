@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.12.0（纯爱化·三段：受孕向清零）
+
+### 移除全部受孕向玩法
+
+- **高潮诱发排卵**：性高潮强制额外排卵的机制全链路移除——排卵只在排卵期
+  自然发生（每期固定 1 颗）。bsUpdateCharacterStatus 的描述不再联动排卵，
+  orgasmOvulationUsed 冷却与 bio.orgasmOvulationAmount 一并删除。
+- **异期复孕（superfetation）**：怀着孕再次受精的全套机械移除——受精窗口
+  衰减、待著床胚胎、conceivedAtDays 孕龄偏移、揭晓伏笔机制。孕期受精闸门
+  关闭：妊娠中不可能再怀第二胎。
+- **同卵分裂（identical）**：受精卵分裂成同卵双胞胎的机制移除——
+  identicalProbability、identicalGroup、applyIdenticalSplit 全删。
+- **假孕期**：心理压力+高性欲触发假孕的阶段与全部分支移除——假孕吐、
+  筑巢行为、84 天后自行破裂的语义都不复存在。
+- **妊娠变速**：bio.gestationModifier 三字段与 bsDebugSetGestationModifier
+  调试工具移除。妊娠速度恒 1.0（即真实 280 天）。
+- **fetus_tags 模块整删**：以上机制全灭后胎儿标签目录为空，tags/
+  describeFetusTags/collectRelevantFetusTags 全链路（含注册页「特殊胎儿
+  来历」整区 UI）删除。
+
+### 移除臭意（odor）
+
+- metabolism.odor 全链路删除：被动累积（0.04/h）、周结算清零、排泄/哺乳
+  转化臭意、臭意压制社交缓解效果、症状表 odor 权重与释义、工具 schema 与
+  提示词。代谢需求收敛为五项：泄意、饿意、困意、乳意、伴意。
+
+### 测试
+
+- 删 superfetation / multi_fetus_identity / fetus_tags / ovulation /
+  register_special_fetus 五个测试文件；audit_fixes / tool_contract /
+  hormone_context / ui_contract 等同步改写；全量 256 个测试通过。
+
 ## v0.11.2（纯爱化·二段）
 
 ### 移除第三方生殖与回归系功能
