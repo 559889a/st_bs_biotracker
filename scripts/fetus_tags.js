@@ -2,13 +2,11 @@
  * 胎儿标签：给一颗胎儿标注「它是怎么来的／它现在处于什么特殊状态」。
  *
  * 分两类来源，合并后去重：
- * 1. 可从既有栏位推导的（代孕、自交）——不落盘。存量存档不需要迁移就能显示，
- *    也不会出现「资料改了但标签还留着旧的」这种两份真相打架的情况。
- * 2. 推导不出来的（同卵分裂，以及往后的胎内回归、异期复孕）
- *    ——写进 fetus.tags 落盘。这些事件的证据在发生当下就消失了：同卵分裂产生的复制体
- *    和原胚在栏位上完全一样，事后无从分辨；未来那几项则根本没有对应栏位。
+ * 全部写进 fetus.tags 落盘（同卵分裂、异期复孕）：这些事件的证据在发生当下
+ * 就消失了——同卵分裂产生的复制体和原胚在栏位上完全一样，事后无从分辨。
  *
- * 多父系功能（嵌合体、孕中孕）已随纯爱化改造移除，目录不再收录这两个标签。
+ * 多父系与第三方生殖功能（嵌合体、孕中孕、代孕、自交、胎内回归）已随纯爱化
+ * 改造移除。
  *
  * 本模块是纯资料层，不依赖引擎也不依赖宿主 API。
  */
@@ -20,26 +18,9 @@
  */
 export const FETUS_TAG_CATALOG = [
   {
-    id: 'surrogacy',
-    label: '代孕',
-    derived: true,
-    short: '卵来自 provider，承载者只提供子宫、不是遗传母亲。出生后孩子通常登记回 provider 名下。',
-  },
-  {
-    id: 'selfing',
-    label: '自交',
-    derived: true,
-    short: '父方与遗传母方是同一个人，双亲同源。',
-  },
-  {
     id: 'identical',
     label: '同卵',
     short: '著床时由同一颗受精卵分裂而来；带同一个 identicalGroup 的几胎基因一致。',
-  },
-  {
-    id: 'rebirth',
-    label: '胎内回归',
-    short: '一名已经出生的角色重新回到子宫内、成为这一胎。产出后是全新的个体，与原来那个人在系统上不是同一笔资料；原角色仍然存在，只是被冻结。',
   },
   {
     id: 'superfetation',
@@ -70,42 +51,13 @@ function sortFetusTags(ids) {
   return [...ids].sort((a, b) => (TAG_ORDER.get(a) ?? 999) - (TAG_ORDER.get(b) ?? 999));
 }
 
-function splitSources(value) {
-  return String(value || '')
-    .split(/\s*[×Xx]\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-/** 遗传母方名单：优先取 providerSources，再退到 provider，最后是承载者本人 */
-function maternalNames(fetus, carrierName) {
-  if (Array.isArray(fetus?.providerSources) && fetus.providerSources.length > 0) {
-    return fetus.providerSources.map((item) => String(item || '').trim()).filter(Boolean);
-  }
-  const provider = String(fetus?.provider || '').trim();
-  if (provider) return splitSources(provider);
-  const carrier = String(carrierName || '').trim();
-  return carrier ? [carrier] : [];
-}
-
 /**
  * 一颗胎儿（或一笔孩子记录）当前的完整标签集合。
- * @param context.carrierName 承载者名字；判断代孕与自交都要拿它作基准
+ * @param context.carrierName 预留参数（代孕/自交推导移除后暂无使用方）
  */
 export function deriveFetusTags(fetus, { carrierName = '' } = {}) {
   if (!fetus || typeof fetus !== 'object') return [];
-  const found = new Set(sanitizeFetusTagList(fetus.tags));
-  const carrier = String(carrierName || '').trim();
-
-  const mothers = maternalNames(fetus, carrier);
-  if (carrier && mothers.some((name) => name && name !== carrier)) found.add('surrogacy');
-
-  const fathers = splitSources(fetus.fathers).filter((name) => name && name !== '未知');
-  if (fathers.length > 0 && mothers.length > 0 && fathers.some((name) => mothers.includes(name))) {
-    found.add('selfing');
-  }
-
-  return sortFetusTags([...found]);
+  return sortFetusTags(sanitizeFetusTagList(fetus.tags));
 }
 
 export function getFetusTagLabel(id) {

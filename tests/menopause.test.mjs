@@ -105,17 +105,6 @@ test('bsSetMenstrualPhases 不能把停经角色切回周期', () => {
   assert.match(result.message, /永久阶段/);
 });
 
-test('停经角色可承接胎内回归（子宫仍在）', () => {
-  const chatState = state.createEmptyChatState();
-  chatState.characters['老年'] = makeCharacter('老年', { base: { stage: '停经', days: 100, age: 55 } });
-  const result = applyToolCall(chatState, {
-    name: 'bsWombReturn',
-    arguments: { female: '老年', returner: '旅人', hours: 2 },
-  });
-  assert.equal(result.applied, true, result.message);
-  assert.equal(chatState.characters['老年'].profile.base.stage, '回归期');
-});
-
 test('围绝经期早期（40 岁左右）生育力衰退但非零：受孕概率被压低', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['阿姨'] = makeCharacter('阿姨', { base: { stage: '排卵期', days: 0, age: 43, eggs: 3 } });

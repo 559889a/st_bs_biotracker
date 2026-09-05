@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.11.2（纯爱化·二段）
+
+### 移除第三方生殖与回归系功能
+
+- **代孕／托卵（bsImplantEmbryo）**：整工具删除。provider/providerSources 归属
+  机制、分娩后自动转交（transferProviderChildren）、完整变量页「搬移孩子记录」
+  UI、注册页代孕勾选与提示词、fetus_tags 代孕标签、族谱「承载」边——全链路移除。
+  纯爱模型下怀孕只有一种方式。
+- **胎内回归（bsWombReturn）**：整工具删除。「回归期」过渡阶段、回归者冻结/
+  解冻机制（含 bsSetCharacterPresence 的冻结逃生口）、回归期衣着压力、
+  rebirth 标签、族谱「前身」边、womb_return.test.mjs——全链路移除。
+- **自交（selfing）标签**：父方=母方本人的推导（扶她自孕向）随纯爱模型移除；
+  名字解析不再拆 "A × B" 双父合并字串。
+- 同卵分裂与异期复孕保留（均为同父场景）。
+
+### 血缘图简化
+
+- 图模型收缩为纯爱形态：每个孩子恰好一条母边（承载者本人）+ 一条父边
+  （精液来源）。carrier/rebirth 边型、geneticParents/carriers 视图分层、
+  多来源 extraSources 机制全部移除，视图模型相应简化。
+
+### 测试
+
+- 删 womb_return / surrogate_children 两个测试文件；lineage / lineage_view /
+  fetus_tags / user_alias / register_special_fetus / menopause / superfetation
+  测试改写为纯爱模型断言；全量 296 个测试通过。
+
 ## v0.11.1（纯爱化改造）
 
 ### 移除多父系功能

@@ -46,11 +46,12 @@ test('bsAddSperm 的 male 会解析 user 宏', () => {
   assert.equal(chatState.characters['艾拉'].profile.base.sperms[0].male, '阿哲');
 });
 
-test('bsWombReturn 的 returner 会解析 user 宏', () => {
+test('bsWombReturn 已移除；fathers 不再是解析键', () => {
+  // 胎内回归/嵌合已随纯爱化移除，returner 键不再解析。此测试仅确认残留调用被拒绝。
   withUser('阿哲');
   const chatState = setup();
-  call(chatState, 'bsWombReturn', { female: '艾拉', returner: '<user>', returnerRace: '人类', hours: 0 });
-  assert.equal(chatState.characters['艾拉'].profile.pregnant.fetuses[0].fathers, '阿哲');
+  const result = call(chatState, 'bsWombReturn', { female: '艾拉', returner: '<user>', hours: 0 });
+  assert.equal(result.applied, false, 'bsWombReturn 应已不存在于工具分发');
 });
 
 test('四种写法都认得，大小写不敏感', () => {
@@ -73,15 +74,6 @@ test('female 也会解析：user 自己被注册成角色时找得到', () => {
   });
   assert.equal(result.applied, true, result.message);
   assert.equal(chatState.characters['阿哲'].profile.base.sperms[0].male, '凯');
-});
-
-test('嵌合体的双父源逐个解析，按全角 × 拆', () => {
-  withUser('阿哲');
-  const chatState = setup(['艾拉', '琪拉']);
-  call(chatState, 'bsImplantEmbryo', {
-    female: '艾拉', provider: '琪拉', race: '人类', fathers: '{{user}} × 凯',
-  });
-  assert.equal(chatState.characters['艾拉'].profile.pregnant.fetuses[0].fathers, '阿哲 × 凯');
 });
 
 test('名字里含拉丁 x 不会被切坏', () => {

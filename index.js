@@ -817,36 +817,19 @@ function renderRegisterChildSourceOptions(ctx) {
   syncRegisterChildSourceFields(ctx);
 }
 
-/** 「直接写入」那两项各自需要的名字，勾了就必须填 */
-const SPECIAL_FETUS_NAME_FIELDS = {
-  rebirth: { inputId: 'bs-bt-special-rebirth', label: '胎内回归', missing: '请填写回到子宫里的那个人' },
-  surrogacy: { inputId: 'bs-bt-special-surrogacy', label: '代孕／托卵', missing: '请填写提供卵的那个人' },
-};
-
 /**
  * 注册页「特殊胎儿来历」的勾选。
  *
- * 每一项都是一个勾选盒；勾了「直接写入」的两项还要各自填一个名字，勾了「交给模型」的
- * 四项只转成提示词。差别在 registry.js 那侧处理，这里只负责收集与检查必填。
- * 一项都没勾时回传 null，让注册路径跟以前完全一样，不多塞任何提示词。
- *
- * @returns {{request: object|null, error: string}} error 非空时代表勾了却没填名字
+ * 每一项都是一个勾选盒，勾了只转成提示词（原「直接写入」的胎内回归/代孕
+ * 已随纯爱化改造移除）。一项都没勾时回传 null，让注册路径跟以前完全一样。
  */
 function getSpecialFetusRequest() {
-  const checked = (key) => Boolean(document.querySelector(`[data-special-toggle="${key}"]`)?.checked);
-  const names = {};
-  for (const [key, field] of Object.entries(SPECIAL_FETUS_NAME_FIELDS)) {
-    if (!checked(key)) continue;
-    const value = String(document.getElementById(field.inputId)?.value || '').trim();
-    if (!value) return { request: null, error: `${field.label}：${field.missing}。` };
-    names[key] = value;
-  }
   const hints = Array.from(document.querySelectorAll('[data-special-hint]'))
     .filter((input) => input.checked)
     .map((input) => String(input.getAttribute('data-special-hint') || ''))
     .filter(Boolean);
-  if (!names.rebirth && !names.surrogacy && hints.length === 0) return { request: null, error: '' };
-  return { request: { rebirth: names.rebirth || '', surrogacy: names.surrogacy || '', hints }, error: '' };
+  if (hints.length === 0) return { request: null, error: '' };
+  return { request: { hints }, error: '' };
 }
 
 /** 注册完成后回头看勾的特殊来历有没有真的落到胎儿身上，没有就回一句提醒 */
@@ -856,8 +839,6 @@ function describeMissingSpecialFetus(request, character) {
   if (!Array.isArray(fetuses) || fetuses.length === 0) return '注意：本次注册没有产生妊娠，勾选的特殊胎儿来历未套用。';
   const missing = [];
   const has = (predicate) => fetuses.some(predicate);
-  if (request.rebirth && !has((item) => Array.isArray(item?.tags) && item.tags.includes('rebirth'))) missing.push('胎内回归');
-  if (request.surrogacy && !has((item) => String(item?.provider || '').trim())) missing.push('代孕／托卵');
   const hintChecks = {
     identical: (item) => Array.isArray(item?.tags) && item.tags.includes('identical'),
     superfetation: (item) => Array.isArray(item?.tags) && item.tags.includes('superfetation'),
@@ -2869,10 +2850,6 @@ function renderTrackPregnancy(viewModel) {
                 <div class="bs-bt-track-card-title">胎儿 ${index + 1}</div>
                 ${renderFetusTagRow(item)}
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">父方姓名</span><span class="bs-bt-track-list-value">${escapeHtml(item?.fathers || '未知')}</span></div>
-                ${item?.provider
-            ? `<div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">遗传母方</span><span class="bs-bt-track-list-value">${escapeHtml(item.provider)}</span></div>`
-            : ''
-          }
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">性别</span><span class="bs-bt-track-list-value">${escapeHtml(item?.gender || '未知')}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">体重倍率</span><span class="bs-bt-track-list-value">${escapeHtml(formatFixedDisplay(item?.weight, 2))}</span></div>
                 <div class="bs-bt-track-list-row"><span class="bs-bt-track-list-label">胎位角</span><span class="bs-bt-track-list-value">${escapeHtml(`${formatIntegerDisplay(item?.tendencyAngle)}°`)}</span></div>
@@ -3081,12 +3058,9 @@ function lineageDetailRows(node) {
     ['性别', node.gender || '—'],
     ['年龄', node.ageLabel || '未知'],
     ['世代', node.generation === 0 ? '本人' : (node.generation < 0 ? `上${Math.abs(node.generation)}代` : `下${node.generation}代`)],
-    ['亲代', node.geneticParents.map((item) => `${item.relation}：${item.name}`).join('、') || '无记录'],
+    ['亲代', node.parents.map((item) => `${item.relation}：${item.name}`).join('、') || '无记录'],
     ['子代', node.children.map((item) => item.name).join('、') || '无记录'],
   ];
-  // 代孕分开列：承载者不是遗传亲代，混进亲代那行会让血统看起来多一个人
-  if (node.carriers.length > 0) rows.push(['孕育者', `${node.carriers.map((item) => item.name).join('、')}（代孕承载）`]);
-  if (node.carriedChildren.length > 0) rows.push(['代孕承载', node.carriedChildren.map((item) => item.name).join('、')]);
   if (node.kind === 'unregistered') rows.push(['状态', '未注册（仅作为亲代出现）']);
   // 只在亲代那行空着时才补这句：有亲代时它是废话，没亲代时它是唯一线索，
   // 说明这人确实在故事里出生过，只是上一代被深度截断或没登记。
@@ -3094,7 +3068,7 @@ function lineageDetailRows(node) {
     rows.push(['出身', '在本故事中出生（上代未显示）']);
   }
   if (Array.isArray(node.extraSources) && node.extraSources.length > 0) {
-    rows.push(['其他来源', `${node.extraSources.join('、')}（嵌合体，仅首位连线）`]);
+    rows.push(['其他来源', node.extraSources.join('、')]);
   }
   return rows
     .map(([label, value]) => `<div class="bs-bt-lineage__detail-row"><span class="bs-bt-lineage__detail-label">${escapeHtml(label)}</span><span class="bs-bt-lineage__detail-value">${escapeHtml(String(value))}</span></div>`)
@@ -4226,130 +4200,7 @@ function renderSelectedFullStateEditor(ctx) {
     output.value = '请选择角色查看完整变量。';
     setFullStateEditStatus('请选择角色后再编辑。');
   }
-  renderChildMoveControls(ctx);
   updateFullStateControls();
-}
-
-function setChildMoveStatus(message, isError = false) {
-  const node = document.getElementById('bs-bt-child-move-status');
-  if (!node) return;
-  node.textContent = String(message || '');
-  node.dataset.state = isError ? 'error' : 'normal';
-}
-
-function formatChildMoveLabel(child, index) {
-  const name = String(child?.name || '').trim() || `孩子 ${index + 1}`;
-  const provider = String(child?.provider || '').trim();
-  const registered = String(child?.registeredAs || '').trim();
-  const marks = [`来源 ${provider}`];
-  if (registered) marks.push(`已注册为 ${registered}`);
-  return `${name}（${marks.join('，')}）`;
-}
-
-/** 只有代孕／寄生（带 provider）的孩子需要搬移；自然生育的归属本来就没有疑义 */
-function getMovableChildEntries(character) {
-  const children = Array.isArray(character?.profile?.children) ? character.profile.children : [];
-  return children
-    .map((child, index) => ({ child, index }))
-    .filter((entry) => String(entry.child?.provider || '').trim().length > 0);
-}
-
-function getChildMoveTargets(child) {
-  const sources = Array.isArray(child?.providerSources)
-    ? child.providerSources.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  const provider = String(child?.provider || '').trim();
-  return [...new Set(sources.length > 0 ? sources : [provider].filter(Boolean))];
-}
-
-function syncChildMoveTarget(sourceSelect, targetSelect, movable) {
-  const selectedIndex = Number(sourceSelect?.value);
-  const entry = movable.find((candidate) => candidate.index === selectedIndex) || movable[0];
-  const targets = Array.isArray(entry?.targets) ? entry.targets : [];
-  targetSelect.innerHTML = targets
-    .map((target) => `<option value="${escapeHtml(target)}">${escapeHtml(target)}</option>`)
-    .join('');
-  targetSelect.disabled = targets.length <= 1;
-}
-
-function renderChildMoveControls(ctx) {
-  const section = document.getElementById('bs-bt-child-move-section');
-  const sourceSelect = document.getElementById('bs-bt-child-move-source');
-  const targetSelect = document.getElementById('bs-bt-child-move-target');
-  if (!section || !sourceSelect || !targetSelect) return;
-  const settings = getSettings(ctx);
-  const chatState = getChatState(ctx, settings);
-  const current = selectedFullStateName ? chatState.characters?.[selectedFullStateName] : null;
-  // 只能转交给 provider／providerSources 指定且已经注册的归属方。
-  const movable = getMovableChildEntries(current)
-    .map((entry) => ({
-      ...entry,
-      targets: getChildMoveTargets(entry.child)
-        .filter((target) => target !== selectedFullStateName && Boolean(chatState.characters?.[target]?.profile)),
-    }))
-    .filter((entry) => entry.targets.length > 0);
-  section.hidden = movable.length === 0;
-  if (section.hidden) return;
-  sourceSelect.innerHTML = movable
-    .map(({ child, index }) => `<option value="${index}">${escapeHtml(formatChildMoveLabel(child, index))}</option>`)
-    .join('');
-  syncChildMoveTarget(sourceSelect, targetSelect, movable);
-  sourceSelect.onchange = () => syncChildMoveTarget(sourceSelect, targetSelect, movable);
-  setChildMoveStatus('只能转交给 provider 指定且已注册的归属方；双母嵌合体可选择其中一位。');
-}
-
-/**
- * 把一笔孩子记录搬到另一个角色名下。
- *
- * childSource 是用 { motherName, childIndex } 定位的，所以搬移必须同步修正
- * 所有指向该母亲的引用：被搬走那笔改指新家长，排在它后面的索引各减一，
- * 否则已注册孩子的「注册来源」会指到别人身上。
- */
-function moveChildRecord(ctx, fromName, childIndex, toName) {
-  const settings = getSettings(ctx);
-  const chatState = getChatState(ctx, settings);
-  const from = chatState.characters?.[fromName];
-  if (!from?.profile) throw new Error('找不到来源角色。');
-  const children = Array.isArray(from.profile.children) ? from.profile.children : [];
-  if (!Number.isInteger(childIndex) || childIndex < 0 || childIndex >= children.length) {
-    throw new Error('找不到要搬移的孩子记录。');
-  }
-  // 只开放代孕／寄生的孩子：自然生育的归属是既成事实，不该被搬走
-  const providers = getChildMoveTargets(children[childIndex]);
-  if (providers.length === 0) {
-    throw new Error('只有代孕、寄生或多母源嵌合所生的孩子可以搬移。');
-  }
-  if (!providers.includes(toName)) {
-    throw new Error('孩子只能搬给 provider 指定的归属方。');
-  }
-  const to = chatState.characters?.[toName];
-  if (!to?.profile) throw new Error('provider 指定的归属方尚未注册。');
-
-  const nextFromChildren = children.slice();
-  const [child] = nextFromChildren.splice(childIndex, 1);
-  // 已经搬到指定家长名下，代孕来源标记就完成任务了
-  const { provider: _provider, providerSources: _providerSources, ...moved } = child;
-  const nextToChildren = [...(Array.isArray(to.profile.children) ? to.profile.children : []), moved];
-  from.profile.children = nextFromChildren;
-  to.profile.children = nextToChildren;
-  const movedIndex = nextToChildren.length - 1;
-
-  for (const character of Object.values(chatState.characters || {})) {
-    const source = character?.profile?.childSource;
-    if (!source || String(source.motherName || '') !== fromName) continue;
-    const index = Number(source.childIndex);
-    if (!Number.isInteger(index)) continue;
-    if (index === childIndex) {
-      source.motherName = toName;
-      source.childIndex = movedIndex;
-    } else if (index > childIndex) {
-      source.childIndex = index - 1;
-    }
-  }
-
-  recordChatStateSnapshot(ctx, chatState, { reason: 'manual_child_move' });
-  saveSettings(ctx);
-  return { child: moved, to: toName };
 }
 
 function isPlainObject(value) {
@@ -4702,7 +4553,6 @@ function renderFullStatePage(ctx) {
     setFullStateEditStatus('请选择角色后再编辑。');
     if (debugPanel) debugPanel.innerHTML = '<div class="bs-bt-connect-status">请选择角色后使用调试工具。</div>';
   }
-  renderChildMoveControls(ctx);
   updateFullStateControls();
   updateFullStateSubpage();
   closeFullStateConfirm();
@@ -6499,28 +6349,6 @@ async function ensureModal(ctx) {
   });
   document.getElementById('bs-bt-full-state-reset')?.addEventListener('click', () => {
     renderSelectedFullStateEditor(ctx);
-  });
-  document.getElementById('bs-bt-child-move-apply')?.addEventListener('click', () => {
-    if (!selectedFullStateName) return;
-    const childIndex = Number(document.getElementById('bs-bt-child-move-source')?.value);
-    const target = String(document.getElementById('bs-bt-child-move-target')?.value || '').trim();
-    if (!Number.isInteger(childIndex) || !target) {
-      setChildMoveStatus('请先选择要搬移的孩子与目标角色。', true);
-      return;
-    }
-    try {
-      const { child } = moveChildRecord(ctx, selectedFullStateName, childIndex, target);
-      renderStatusPanel(ctx);
-      renderFullStatePage(ctx);
-      updateMainFlowPrompt(ctx);
-      const name = String(child?.name || '').trim() || '该孩子';
-      setChildMoveStatus(`已把 ${name} 搬到 ${target} 名下。`);
-      globalThis.toastr?.success?.(`[BS BioTracker] 已把孩子搬给 ${target}`);
-    } catch (error) {
-      const message = String(error?.message || error);
-      setChildMoveStatus(message, true);
-      globalThis.toastr?.error?.(message, '[BS BioTracker]');
-    }
   });
   document.getElementById('bs-bt-full-state-confirm-yes')?.addEventListener('click', () => {
     if (!selectedFullStateName) return;

@@ -27,7 +27,7 @@ function raceLabel(race, derivedType) {
   return derived ? `[${derived}]${base}` : base;
 }
 
-const EDGE_LABELS = { mother: '母', father: '父', carrier: '承载', rebirth: '前身' };
+const EDGE_LABELS = { mother: '母', father: '父' };
 
 /**
  * 年龄取整数岁，与追踪页概览同一套算法——同一个角色在两个画面显示不同岁数
@@ -40,19 +40,19 @@ function ageLabel(age) {
 }
 
 /**
- * 同一世代里把「遗传亲代完全相同」的人聚成一丛，渲染层才画得出手足共用的连接线。
+ * 同一世代里把「亲代完全相同」的人聚成一丛，渲染层才画得出手足共用的连接线。
  * 没有亲代的（图上被截断的祖先、手动注册的角色）各自成丛，不会被误并成一家。
  */
 function buildClusters(rowNodes) {
   const clusters = [];
   const byKey = new Map();
   for (const node of rowNodes) {
-    const key = node.geneticParents.length > 0
-      ? node.geneticParents.map((item) => `${item.relation}:${item.id}`).sort().join('|')
+    const key = node.parents.length > 0
+      ? node.parents.map((item) => `${item.relation}:${item.id}`).sort().join('|')
       : `solo:${node.id}`;
     let cluster = byKey.get(key);
     if (!cluster) {
-      cluster = { key, parents: node.geneticParents, nodes: [] };
+      cluster = { key, parents: node.parents, nodes: [] };
       byKey.set(key, cluster);
       clusters.push(cluster);
     }
@@ -70,18 +70,14 @@ export function buildLineageView(chatState, centerName, { up = 2, down = 2 } = {
   }
 
   const byId = new Map(focused.nodes.map((node) => [node.id, node]));
-  // 无名的孩子也可能当亲代（孕中孕的母亲就是同胎的另一个孩子），
-  // 没有 fallback 的话关系栏会印出原始节点 id
+  // 无名的孩子也可能当亲代，没有 fallback 的话关系栏会印出原始节点 id
   const nameOf = (id) => {
     const node = byId.get(id);
     if (!node) return id;
     return node.name || '未命名';
   };
 
-  /**
-   * 同一对关系可能有多条边——自交时同一人既是母也是父，代孕时承载者与遗传母
-   * 各有一条。按对方节点去重，关系标签合并成「母·父」，否则清单里会重复出现同一人。
-   */
+  /** 按对方节点去重，防止清单里重复出现同一人。 */
   const collapse = (list) => {
     const merged = new Map();
     for (const item of list) {
@@ -102,10 +98,6 @@ export function buildLineageView(chatState, centerName, { up = 2, down = 2 } = {
     const childrenOf = collapse(focused.edges
       .filter((edge) => edge.from === node.id)
       .map((edge) => ({ id: edge.to, name: nameOf(edge.to), relation: EDGE_LABELS[edge.type] || edge.type })));
-    // 承载者不是遗传亲代，不进族谱上的亲代标注，只在详情栏另列一行。
-    // 「前身」是胎内回归者：他确实提供了这一胎的父系血统，所以算遗传亲代，
-    // 只是标签不写「父」——那个位置上站的往往是女角色。
-    const isGenetic = (item) => item.relations.some((relation) => relation === '母' || relation === '父' || relation === '前身');
     return {
       ...node,
       isCenter: node.id === centerId,
@@ -113,10 +105,7 @@ export function buildLineageView(chatState, centerName, { up = 2, down = 2 } = {
       raceLabel: raceLabel(node.race, node.derivedType),
       ageLabel: ageLabel(node.age),
       parents,
-      geneticParents: parents.filter(isGenetic),
-      carriers: parents.filter((item) => !isGenetic(item)),
       children: childrenOf,
-      carriedChildren: childrenOf.filter((item) => !isGenetic(item)),
       // 未注册的路人不能点进详情，没有可展开的资料
       hasDetail: node.kind !== 'unregistered',
     };

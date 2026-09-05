@@ -55,36 +55,6 @@ test('中心角色不存在时回传空视图', () => {
   assert.deepEqual(view.generations, []);
 });
 
-test('自交与代孕的重复关系会合并，不会同一人列两次', () => {
-  const view = buildLineageView({
-    characters: {
-      艾拉: ch('艾拉', [
-        // 自交：同一人既是母也是父，两条边
-        { id: 'c1', name: '孤生子', fathers: '艾拉' },
-        // 代孕：艾拉是承载者，遗传母是琪拉
-        { id: 'c2', name: '寄养儿', fathers: '凯', provider: '琪拉', providerSources: ['琪拉'] },
-      ]),
-      琪拉: ch('琪拉'),
-    },
-  }, '艾拉');
-
-  const center = view.nodes.find((node) => node.isCenter);
-  const soloEntries = center.children.filter((item) => item.name === '孤生子');
-  assert.equal(soloEntries.length, 1, '自交的孩子不该在子代清单里出现两次');
-  assert.equal(soloEntries[0].relation, '母·父', '两种关系应合并成一个标签');
-
-  const solo = view.nodes.find((node) => node.displayName === '孤生子');
-  assert.equal(solo.parents.length, 1);
-  assert.equal(solo.parents[0].relation, '母·父');
-
-  // 代孕仍要能分辨承载与遗传母
-  const foster = view.nodes.find((node) => node.displayName === '寄养儿');
-  assert.deepEqual(
-    foster.parents.map((item) => `${item.relation}:${item.name}`).sort(),
-    ['母:琪拉', '承载:艾拉', '父:凯'].sort(),
-  );
-});
-
 test('同一代里亲代相同的手足聚成一丛，亲代不同的分开', () => {
   const view = buildLineageView({
     characters: {
@@ -110,24 +80,6 @@ test('没有亲代的人各自成丛，不会被并成一家', () => {
   assert.ok(top.clusters.every((cluster) => cluster.parents.length === 0));
 });
 
-test('代孕的承载者不算遗传亲代，另外列出', () => {
-  const view = buildLineageView({
-    characters: {
-      琪拉: ch('琪拉'),
-      贝拉: ch('贝拉', [{ id: 's1', name: '寄养儿', provider: '琪拉', fathers: '凯' }]),
-      凯: ch('凯'),
-    },
-  }, '贝拉');
-  const child = view.nodes.find((node) => node.displayName === '寄养儿');
-  assert.deepEqual(child.geneticParents.map((p) => `${p.relation} ${p.name}`), ['母 琪拉', '父 凯']);
-  assert.deepEqual(child.carriers.map((p) => p.name), ['贝拉']);
-  // 亲代标注只挂遗传亲代，承载者不进族谱上的膠囊
-  const row = view.generations.find((item) => item.generation === 1);
-  assert.deepEqual(row.clusters[0].parents.map((p) => p.name), ['琪拉', '凯']);
-  const carrier = view.nodes.find((node) => node.isCenter);
-  assert.deepEqual(carrier.carriedChildren.map((p) => p.name), ['寄养儿']);
-});
-
 test('节点带上整数岁的年龄标签，未注册的路人留空', () => {
   const view = buildLineageView({
     characters: {
@@ -146,41 +98,6 @@ test('节点带上整数岁的年龄标签，未注册的路人留空', () => {
   assert.equal(baby.ageLabel, '0岁');
   const stranger = view.nodes.find((node) => node.displayName === '路人甲');
   assert.equal(stranger.ageLabel, '', '未注册的路人没有年龄资料');
-});
-
-test('胎内回归者标为「前身」而不是「父」，但仍算遗传亲代', () => {
-  const view = buildLineageView({
-    characters: {
-      艾拉: {
-        name: '艾拉', initialized: true,
-        profile: {
-          base: { race: '人类', age: 24 },
-          children: [{
-            id: 'r1', name: '重生子', fathers: '琪拉', fatherRace: '龙族',
-            race: '人类x龙族', age: 0, tags: ['rebirth'],
-          }],
-        },
-      },
-      琪拉: { name: '琪拉', initialized: true, profile: { base: { race: '龙族', age: 26 }, children: [] } },
-    },
-  }, '艾拉');
-
-  const child = view.nodes.find((node) => node.displayName === '重生子');
-  assert.deepEqual(
-    child.parents.map((p) => `${p.relation} ${p.name}`).sort(),
-    ['前身 琪拉', '母 艾拉'].sort(),
-  );
-  // 前身提供了父系血统，所以算遗传亲代——不能被当成代孕承载者那样排除在标注外
-  assert.deepEqual(
-    child.geneticParents.map((p) => p.name).sort(),
-    ['琪拉', '艾拉'].sort(),
-  );
-  assert.deepEqual(child.carriers, []);
-  const row = view.generations.find((item) => item.generation === 1);
-  assert.deepEqual(
-    row.clusters[0].parents.map((p) => `${p.relation} ${p.name}`).sort(),
-    ['前身 琪拉', '母 艾拉'].sort(),
-  );
 });
 
 test('一般孩子仍然标为「父」', () => {

@@ -382,32 +382,6 @@
                 <div class="bs-bt-special-list">
                   <div class="bs-bt-special-item">
                     <label class="bs-bt-special-head">
-                      <input id="bs-bt-special-toggle-rebirth" type="checkbox" data-special-toggle="rebirth" />
-                      <span class="bs-bt-special-name">胎内回归</span>
-                      <span class="bs-bt-special-mode" data-mode="hard">直接写入</span>
-                    </label>
-                    <div class="bs-bt-special-body" data-special-body="rebirth" hidden>
-                      <small>一名已出生的角色回到子宫里成为其中一胎。产出后是全新个体。</small>
-                      <input id="bs-bt-special-rebirth" class="text_pole" type="text"
-                        placeholder="回到子宫里的那个人（可填 user 名）" />
-                    </div>
-                  </div>
-
-                  <div class="bs-bt-special-item">
-                    <label class="bs-bt-special-head">
-                      <input id="bs-bt-special-toggle-surrogacy" type="checkbox" data-special-toggle="surrogacy" />
-                      <span class="bs-bt-special-name">代孕／托卵</span>
-                      <span class="bs-bt-special-mode" data-mode="hard">直接写入</span>
-                    </label>
-                    <div class="bs-bt-special-body" data-special-body="surrogacy" hidden>
-                      <small>卵来自别人，承载者只提供子宫、不是遗传母亲。</small>
-                      <input id="bs-bt-special-surrogacy" class="text_pole" type="text"
-                        placeholder="提供卵的那个人" />
-                    </div>
-                  </div>
-
-                  <div class="bs-bt-special-item">
-                    <label class="bs-bt-special-head">
                       <input id="bs-bt-special-identical" type="checkbox" data-special-toggle="identical" data-special-hint="identical" />
                       <span class="bs-bt-special-name">同卵双胞胎</span>
                       <span class="bs-bt-special-mode" data-mode="hint">交给模型</span>
@@ -428,7 +402,7 @@
                     </div>
                   </div>
                 </div>
-                <small>「直接写入」由程式保证生效；「交给模型」得靠它编出胎儿结构，没照办时重跑一次注册即可。</small>
+                <small>「交给模型」得靠它编出胎儿结构，没照办时重跑一次注册即可。</small>
               </details>
 
               <div class="settings_section bs-bt-action-row">
@@ -716,18 +690,6 @@
               <div class="settings_section bs-bt-action-row">
                 <button id="bs-bt-full-state-apply" class="menu_button" type="button" disabled>应用修改</button>
                 <button id="bs-bt-full-state-reset" class="menu_button" type="button" disabled>重置显示</button>
-              </div>
-
-              <div id="bs-bt-child-move-section" class="settings_section" hidden>
-                <div class="bs-bt-status-title">搬移孩子记录</div>
-                <label for="bs-bt-child-move-source">要搬走的孩子</label>
-                <select id="bs-bt-child-move-source" class="text_pole"></select>
-                <label for="bs-bt-child-move-target">转交给（归属方）</label>
-                <select id="bs-bt-child-move-target" class="text_pole"></select>
-                <div id="bs-bt-child-move-status" class="bs-bt-inline-status">只能转交给 provider 指定且已注册的归属方。</div>
-                <div class="settings_section bs-bt-action-row">
-                  <button id="bs-bt-child-move-apply" class="menu_button" type="button">搬移</button>
-                </div>
               </div>
 
               <div class="settings_section bs-bt-action-row">

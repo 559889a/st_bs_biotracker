@@ -99,21 +99,14 @@ test('假孕期不会因为异期复孕转成真妊娠', () => {
   assert.equal(P(chatState).pregnant.fetuses.length, 0, '假孕期不该凭空长出胎儿');
 });
 
-test('回归期不会被异期复孕插队', () => {
+test('停经角色不会被异期复孕插队', () => {
   alwaysHit();
-  // 真实的回归期孕龄是 0：给非零值会触发妊娠阶段推导，被改写成孕早期
-  const chatState = one({ stage: '回归期' }, {
-    pregnantDays: 0, effectivePregnantDays: 0,
-    wombReturn: { returner: 'B', totalHours: 48, remainingHours: 48 },
-    fetuses: [fetus({ tags: ['rebirth'], weight: 3 })],
-  });
-  // 只推 1 小时：回归期还剩 48 小时，别让它走完转进孕早期
-  for (let i = 0; i < 3; i += 1) {
-    armSperm(chatState);
-    applyToolCall(chatState, { name: 'bsPassedTime', arguments: { hour: 1 } });
-  }
-  assert.equal(P(chatState).base.stage, '回归期');
-  assert.equal(lateOf(chatState), undefined);
+  // 停经不在受精闸门内：即便子房有精有卵也不会受精（fixture 自带 1 胎，不应再添）
+  const chatState = one({ stage: '停经' }, {});
+  armSperm(chatState);
+  step(chatState);
+  assert.equal(P(chatState).pregnant.fetuses.length, 1, '停经角色不应再次受精');
+  assert.equal(lateOf(chatState), undefined, '不应产生异期胎');
 });
 
 test('揭晓之前模型与追踪页都看不到这一胎', () => {

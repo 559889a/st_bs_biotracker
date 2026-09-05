@@ -1,30 +1,12 @@
 /**
  * 血缘关系图：从 chatState 读出节点与边，不修改任何状态、不依赖引擎逻辑。
  *
- * 图的形状是 DAG 而不是族谱树——嵌合体让一个个体可能有多位亲代，代孕让
- * 「母亲」分成遗传母与承载者。按既定取舍，嵌合体只连首位父母，其余来源
- * 保留在节点上供渲染层显示。
+ * 纯爱模型下图的形状极简：每个孩子恰好一位母亲（承载者本人）与一位父亲
+ * （精液来源）。多父/代孕/自交/胎内回归的边型已随纯爱化改造移除。
  *
  * 身分即名字：characters 以名字为键，所以 children[*].fathers 这个字串
  * 直接就能对回角色节点；对不上的（路人）当作未注册叶节点。
  */
-
-/** 双父／多母源会合并成 "A×B"，与 registry 的拆分规则一致 */
-function splitSources(value) {
-  return String(value || '')
-    .split(/\s*[×Xx]\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function firstSource(list, fallbackText) {
-  if (Array.isArray(list) && list.length > 0) {
-    const first = String(list[0] || '').trim();
-    if (first) return { first, all: list.map((item) => String(item || '').trim()).filter(Boolean) };
-  }
-  const parts = splitSources(fallbackText);
-  return { first: parts[0] || '', all: parts };
-}
 
 export function buildLineageGraph(chatState) {
   const characters = (chatState && typeof chatState.characters === 'object' && chatState.characters) || {};
@@ -39,8 +21,7 @@ export function buildLineageGraph(chatState) {
 
   /**
    * 解析一个亲代名字到节点；未注册的当叶节点。
-   * race/derivedType 只在能明确对应时才补——嵌合体有多位父源时
-   * 那串合并种族对不回单一个人，宁可留空也不要标错血统。
+   * race/derivedType 能对应时才补，宁可留空也不要标错血统。
    */
   const resolveParent = (name, traits = null) => {
     const value = String(name || '').trim();
@@ -95,45 +76,15 @@ export function buildLineageGraph(chatState) {
       const childNode = nodes.get(childNodeId);
       childNode.childId = child.id ?? null;
 
-      // 孕中孕：母亲是同胎次的另一个孩子（宿主胎儿），承载者只是承载。
-      // 这条边不能走名字——胎儿没有名字，靠出生时解析出来的 nestedInChildId 指过去。
-      // 母系：provider 存在代表 owner 只是承载者，遗传母是 provider。
-      // 这两个在下面算 extraSources 时还要用，宣告留在外层。
-      const providerInfo = firstSource(child.providerSources, child.provider);
-      const chimeraMaternal = firstSource(child.chimera?.maternalSources, '');
-      const nestedInChildId = String(child.nestedInChildId || '').trim();
-      const geneticMother = providerInfo.first || chimeraMaternal.first;
-      if (nestedInChildId) {
-        edges.push({ from: `child:${nestedInChildId}`, to: childNodeId, type: 'mother' });
-        edges.push({ from: characterNodeId(ownerName), to: childNodeId, type: 'carrier' });
-      } else if (geneticMother && geneticMother !== ownerName) {
-        const from = resolveParent(geneticMother);
-        if (from) edges.push({ from, to: childNodeId, type: 'mother' });
-        edges.push({ from: characterNodeId(ownerName), to: childNodeId, type: 'carrier' });
-      } else {
-        edges.push({ from: characterNodeId(ownerName), to: childNodeId, type: 'mother' });
-      }
+      // 母系：纯爱模型下承载者就是遗传母亲
+      edges.push({ from: characterNodeId(ownerName), to: childNodeId, type: 'mother' });
 
-      // 父系：嵌合体优先读 fatherSources，否则拆 "A×B"，都只取首位。
-      // 胎内回归的「父」其实是回到子宫里的那个人，与一般父系不是同一回事，
-      // 边型另外标出来，免得族谱上把一名女角色挂在「父」底下。
-      const isRebirth = Array.isArray(child.tags) && child.tags.includes('rebirth');
-      const fatherInfo = firstSource(child.chimera?.fatherSources, child.fathers);
-      if (fatherInfo.first && fatherInfo.first !== '未知') {
-        const singleFather = fatherInfo.all.length <= 1;
-        const from = resolveParent(fatherInfo.first, singleFather
-          ? { race: child.fatherRace ?? null, derivedType: child.fatherDerivedType ?? null }
-          : null);
-        if (from) edges.push({ from, to: childNodeId, type: isRebirth ? 'rebirth' : 'father' });
+      // 父系：精液来源
+      const fatherName = String(child.fathers || '').trim();
+      if (fatherName && fatherName !== '未知') {
+        const from = resolveParent(fatherName, { race: child.fatherRace ?? null, derivedType: child.fatherDerivedType ?? null });
+        if (from) edges.push({ from, to: childNodeId, type: 'father' });
       }
-
-      // 其余来源不连线，但保留下来供渲染层标注「另有 N 位来源」
-      const extraSources = [
-        ...providerInfo.all.slice(1),
-        ...chimeraMaternal.all.slice(1),
-        ...fatherInfo.all.slice(1),
-      ];
-      if (extraSources.length > 0) childNode.extraSources = extraSources;
     }
   }
 
@@ -146,7 +97,6 @@ export function buildLineageGraph(chatState) {
  * 全图在手机上很快就糊了，实际想看的多半是「这孩子谁生的、跟谁有血缘」。
  * 中心为第 0 代，祖先为负、后代为正，渲染层照 generation 分代横排即可。
  *
- * 近亲繁殖（自交、胎内回归）会让同一个人同时出现在两个世代距离上，
  * 此处取最近的一条——分代横排只能给每人一列，取近的比取远的直观。
  */
 export function focusLineage(graph, centerId, { up = 2, down = 2 } = {}) {

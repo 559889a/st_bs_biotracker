@@ -13,57 +13,27 @@ test('一般妊娠没有任何标签', () => {
   assert.deepEqual(tags, []);
 });
 
-test('嵌合/孕中孕标签已随多父系功能移除：字段在也会被白名单丢弃', () => {
-  const tags = deriveFetusTags({ fathers: '凯', tags: ['chimera', 'nested', 'identical'] }, { carrierName: '艾拉' });
-  assert.ok(!tags.includes('chimera'));
-  assert.ok(!tags.includes('nested'));
+test('多父系/第三方生殖标签已移除：字段在也会被白名单丢弃', () => {
+  const tags = deriveFetusTags({
+    fathers: '凯',
+    provider: '琪拉',
+    tags: ['chimera', 'nested', 'surrogacy', 'selfing', 'rebirth', 'identical'],
+  }, { carrierName: '艾拉' });
+  for (const removed of ['chimera', 'nested', 'surrogacy', 'selfing', 'rebirth']) {
+    assert.ok(!tags.includes(removed), `${removed} 应被白名单丢弃`);
+  }
   assert.ok(tags.includes('identical'), '目录内标签照常保留');
 });
 
-test('代孕：遗传母方不是承载者', () => {
-  const tags = deriveFetusTags(
-    { fathers: '凯', provider: '琪拉', providerSources: ['琪拉'] },
-    { carrierName: '贝拉' },
-  );
-  assert.ok(tags.includes('surrogacy'));
-});
-
-test('自己怀自己的卵不算代孕', () => {
-  const tags = deriveFetusTags(
-    { fathers: '凯', provider: '艾拉', providerSources: ['艾拉'] },
-    { carrierName: '艾拉' },
-  );
-  assert.ok(!tags.includes('surrogacy'));
-});
-
-test('自交：父方就是遗传母方', () => {
-  const tags = deriveFetusTags({ fathers: '艾拉' }, { carrierName: '艾拉' });
-  assert.ok(tags.includes('selfing'));
-});
-
-test('代孕情境下的自交比对的是遗传母方，不是承载者', () => {
-  const surrogate = deriveFetusTags(
-    { fathers: '琪拉', provider: '琪拉', providerSources: ['琪拉'] },
-    { carrierName: '贝拉' },
-  );
-  assert.deepEqual(surrogate.sort(), ['selfing', 'surrogacy'].sort());
-  // 父方等于承载者但不等于遗传母方：那是普通的代孕，不是自交
-  const notSelfing = deriveFetusTags(
-    { fathers: '贝拉', provider: '琪拉', providerSources: ['琪拉'] },
-    { carrierName: '贝拉' },
-  );
-  assert.ok(!notSelfing.includes('selfing'));
-});
-
-test('父方未知不会被误判成自交', () => {
+test('fathers 未知时不产生任何标签', () => {
   const tags = deriveFetusTags({ fathers: '未知' }, { carrierName: '未知' });
   assert.deepEqual(tags, []);
 });
 
-test('落盘标签与推导标签合并去重并按目录排序', () => {
-  const fetus = { fathers: '艾拉', tags: ['identical', 'selfing'] };
+test('落盘标签去重并按目录排序', () => {
+  const fetus = { fathers: '凯', tags: ['superfetation', 'identical', 'identical'] };
   const tags = deriveFetusTags(fetus, { carrierName: '艾拉' });
-  assert.deepEqual(tags, ['selfing', 'identical']);
+  assert.deepEqual(tags, ['identical', 'superfetation']);
 });
 
 test('未收录的标签一律丢弃', () => {
@@ -88,15 +58,10 @@ test('提示词只描述本轮出现过的标签', () => {
   assert.deepEqual(describeFetusTags(['not_a_real_tag']), []);
 });
 
-test('目录不再收录多父系标签；纯爱向标签齐全', () => {
+test('目录只保留纯爱向标签', () => {
   const ids = FETUS_TAG_CATALOG.map((tag) => tag.id);
-  for (const kept of ['surrogacy', 'selfing', 'identical', 'rebirth', 'superfetation']) {
-    assert.ok(ids.includes(kept), `${kept} 应在目录中`);
-  }
-  for (const removed of ['chimera', 'nested', 'androgenesis', 'gynogenesis']) {
-    assert.ok(!ids.includes(removed), `${removed} 已移除，不应在目录中`);
-  }
-  assert.deepEqual(getFetusTagLabels(['rebirth', 'superfetation']), ['胎内回归', '异期复孕']);
+  assert.deepEqual(ids.sort(), ['identical', 'superfetation']);
+  assert.deepEqual(getFetusTagLabels(['superfetation']), ['异期复孕']);
 });
 
 // ── 落盘路径：白名单式清洗只要漏列新栏位，标签就会静默消失，整个机制等于没做
@@ -152,7 +117,7 @@ test('分娩时标签跟着孩子记录一起留下来', () => {
   const chatState = state.createEmptyChatState();
   chatState.characters['艾拉'] = makePregnant('艾拉', [{
     embryoId: 1,
-    fathers: '艾拉',
+    fathers: '凯',
     race: '人类',
     gender: '女',
     embryoType: '胎生',
@@ -167,11 +132,7 @@ test('分娩时标签跟着孩子记录一起留下来', () => {
   assert.equal(result.applied, true);
   const child = chatState.characters['艾拉'].profile.children[0];
   assert.deepEqual(child.tags, ['identical'], '落盘标签必须跟到孩子身上');
-  // 自交是推导出来的：孩子记录不存这个标签，读的时候照样算得出来
-  assert.deepEqual(
-    deriveFetusTags(child, { carrierName: '艾拉' }).sort(),
-    ['identical', 'selfing'].sort(),
-  );
+  assert.deepEqual(deriveFetusTags(child, { carrierName: '艾拉' }), ['identical']);
 });
 
 // ── 说明要送到写故事的主模型，不能只送给追踪器 ──────────────────

@@ -1,4 +1,4 @@
-// 血缘关系图：纯读取 chatState，验证六种场景的节点与边。
+// 血缘关系图：纯读取 chatState。纯爱模型：母=承载者本人、父=精液来源，各一条边。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -43,41 +43,6 @@ test('百合：父方指向已注册角色 B，B 不会被当成路人', () => {
   assert.equal(graph.nodes.find((node) => node.id === 'char:B').kind, 'character');
 });
 
-test('自交：同一节点连出母与父两条边', () => {
-  const graph = buildLineageGraph({
-    characters: { 苔妮: character('苔妮', [{ id: 'c1', name: '孢子', fathers: '苔妮' }], { race: '真菌亚人' }) },
-  });
-  const child = childNode(graph, '孢子');
-  assert.deepEqual(parentsOf(graph, child.id), ['father:char:苔妮', 'mother:char:苔妮']);
-});
-
-test('代孕：遗传母与承载者用不同边型区分', () => {
-  const graph = buildLineageGraph({
-    characters: {
-      承载者: character('承载者', [{ id: 'c1', name: '寄养儿', fathers: '凯', provider: '遗传母', providerSources: ['遗传母'] }]),
-      遗传母: character('遗传母'),
-    },
-  });
-  const child = childNode(graph, '寄养儿');
-  assert.deepEqual(parentsOf(graph, child.id), ['carrier:char:承载者', 'father:name:凯', 'mother:char:遗传母']);
-});
-
-test('嵌合体：只连首位父母，其余来源保留在节点上', () => {
-  const graph = buildLineageGraph({
-    characters: {
-      艾拉: character('艾拉', [{
-        id: 'c1', name: '融合儿', fathers: '凯×莱恩',
-        chimera: { fatherSources: ['凯', '莱恩'], maternalSources: ['艾拉'] },
-      }]),
-    },
-  });
-  const child = childNode(graph, '融合儿');
-  // 只有首位父亲连线
-  assert.deepEqual(parentsOf(graph, child.id), ['father:name:凯', 'mother:char:艾拉']);
-  assert.deepEqual(child.extraSources, ['莱恩'], '第二位父源保留但不连线');
-  assert.equal(graph.nodes.some((node) => node.name === '莱恩'), false, '未连线的来源不该产生节点');
-});
-
 test('胎内回归：A 是父方，孩子注册成 A+ 并能继续往下长', () => {
   const graph = buildLineageGraph({
     characters: {
@@ -105,25 +70,17 @@ test('空状态不会炸', () => {
   assert.deepEqual(buildLineageGraph({}), { nodes: [], edges: [] });
 });
 
-test('未注册的父亲带上血统，且只在单一父源时才标', () => {
+test('未注册的父亲带上血统', () => {
   const graph = buildLineageGraph({
     characters: {
       艾拉: character('艾拉', [
         { id: 'c1', name: '独子', fathers: '凯', fatherRace: '龙族', fatherDerivedType: '血族' },
-        {
-          id: 'c2', name: '融合儿', fathers: '甲×乙',
-          fatherRace: '龙族x人类',
-          chimera: { fatherSources: ['甲', '乙'] },
-        },
       ]),
     },
   });
   const kai = graph.nodes.find((node) => node.name === '凯');
-  assert.equal(kai.race, '龙族', '单一父源应带上血统');
+  assert.equal(kai.race, '龙族', '父亲应带上血统');
   assert.equal(kai.derivedType, '血族');
-  // 嵌合体的 fatherRace 是合并字串，对不回单一个人，宁可留空
-  const jia = graph.nodes.find((node) => node.name === '甲');
-  assert.equal(jia.race, undefined, '多父源时不该给首位父亲标上合并血统');
 });
 
 test('注册后的孩子节点不写指向自己的 registeredAs', () => {
@@ -175,14 +132,13 @@ test('深度上限会截断更远的世代', () => {
   assert.equal(shallow.nodes.some((node) => node.name === '祖母'), false, '第二代祖先应被截断');
 });
 
-test('自交时同一节点只占一个世代', () => {
+test('孩子的母节点在上一代', () => {
   const graph = buildLineageGraph({
-    characters: { 苔妮: character('苔妮', [{ id: 'c1', name: '孢子', fathers: '苔妮' }]) },
+    characters: { 艾拉: character('艾拉', [{ id: 'c1', name: '孩子', fathers: '凯' }]) },
   });
   const focused = focusLineage(graph, 'child:c1', { up: 2, down: 2 });
-  const mother = focused.nodes.filter((node) => node.name === '苔妮');
-  assert.equal(mother.length, 1, '同一个人不该重复出现');
-  assert.equal(mother[0].generation, -1);
+  const mother = focused.nodes.find((node) => node.name === '艾拉');
+  assert.equal(mother.generation, -1);
 });
 
 test('中心节点不存在时回传空图', () => {
