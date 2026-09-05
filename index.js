@@ -23,6 +23,7 @@ import {
 } from './scripts/stage_config.js';
 import { buildMainFlowPrompt, resetPoller, runTracker } from './scripts/tracker.js';
 import { buildLineageView, relatedNodeIds } from './scripts/lineage_view.js';
+import { formatSexualitySummary } from './scripts/sexuality_config.js';
 import { applyToolCall } from './scripts/tools.js';
 import { appendSkillHistory, getTalentLabel, normalizeTalentList, removeSkillDefinition, requiredExp, resolveSkillDefinition, SKILL_MAX_LEVEL, TALENT_MAX_LEVEL } from './scripts/skill_config.js';
 import {
@@ -2456,6 +2457,7 @@ function buildTrackCharacterViewModel(character) {
         ['最近对象', experience.latestSexPartner ?? '无'],
         ['情感对象', experience.emotionalMate ?? '无'],
         ['婚姻对象', experience.marriageMate ?? '无'],
+        ['性爱观/癖好', formatSexualitySummary(profile.sexuality) || '未设定'],
         ['怀孕次数', `${Number(experience.pregnantExperience) || 0}次`],
         ['自然产', `${Number(experience.naturalBirthExperience) || 0}次`],
         ['手术产', `${Number(experience.surgicalBirthExperience) || 0}次`],

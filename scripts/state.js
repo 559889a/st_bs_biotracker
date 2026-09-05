@@ -9,6 +9,7 @@ import {
   PSY_PREG_BOOL_FIELDS,
 } from './registry_psy_config.js';
 import { LABOR_STAGES, MENSTRUAL_STAGES, MENSTRUAL_STAGE_DAYS, PREGNANCY_STAGE_DAYS, PREGNANCY_STAGES } from './stage_config.js';
+import { createDefaultSexuality } from './sexuality_config.js';
 import { normalizeNextSkillId, normalizeSkillCatalog, normalizeSkillHistory, normalizeSkillList, normalizeTalentList } from './skill_config.js';
 import {
   createDefaultWardrobeItem,
@@ -779,6 +780,7 @@ export function createDefaultFemaleState(name = '') {
         preg: buildEmptyPsychologyGroup(PSY_PREG_FIELDS, PSY_PREG_BOOL_FIELDS),
         stageProfiles: {},
       },
+      sexuality: createDefaultSexuality(),
       children: [],
       skills: [],
       talents: [],
@@ -1603,6 +1605,7 @@ function createSnapshotCharacterBaseline(name = '') {
         preg: buildEmptyPsychologyGroup(PSY_PREG_FIELDS, PSY_PREG_BOOL_FIELDS),
         stageProfiles: {},
       },
+      sexuality: createDefaultSexuality(),
       children: [],
       skills: [],
       talents: [],

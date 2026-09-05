@@ -15,6 +15,7 @@
  * tracker 块给「心理写入倾向」（psy 字段，喂给 bsUpdatePsychology / bsWriteDiary）。
  */
 import { LABOR_STAGES, MENSTRUAL_STAGES, PREGNANCY_STAGES } from './stage_config.js';
+import { describeSexualityLines } from './sexuality_config.js';
 
 /** 黄体期晚段的 PMS 窗口：距阶段结束不足 4 天视为晚段 */
 const LUTEAL_LATE_WINDOW_DAYS = 4;
@@ -276,14 +277,25 @@ export function buildSexualAttitudeBlock(existingState) {
       attitude.push('妊娠中的性以彼此舒适与安全为先');
     }
 
+    // 慢层画像：性爱观与癖好（注册时定，工具不改）。hasContraception 只在
+    // psy 可用时传入——psy 关闭时不该凭空断言「她没在避孕」。
+    const portrait = describeSexualityLines(item?.profile?.sexuality, {
+      hasContraception: psychology?.mens ? hasContraception : undefined,
+      autonomyValue: psychology?.mens?.autonomy_value,
+    });
+
     if (facts.length > 0 || attitude.length > 0) {
       lines.push(`- ${displayName}：${[...facts, ...attitude].join('；')}。`);
+      lines.push(...portrait);
+    } else if (portrait.length > 0) {
+      lines.push(`- ${displayName}：`);
+      lines.push(...portrait);
     }
   }
   if (lines.length === 0) return '';
   return [
     '[性与避孕态度]',
-    '以下是按角色当前生理阶段与关系状态推导的避孕/性行为态度参考；写亲密场景时必须把它纳入叙事——角色会不会要求戴套、会不会接受内射，取决于这里给出的语境，不要凭黄文惯性一律写无套。',
+    '以下是按角色当前生理阶段、关系状态与其稳定性爱观推导的态度参考；写亲密场景时必须把它纳入叙事——她会不会答应、需不需要感情前提、主动还是被动、要不要戴套、接不接受内射，都取决于这里给出的语境，不要凭黄文惯性一律写成无套且来者不拒。缩排行是该角色的长期癖好画像，除剧情明确改变外应保持一致。',
     ...lines,
   ].join('\n');
 }

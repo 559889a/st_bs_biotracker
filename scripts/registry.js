@@ -14,6 +14,10 @@ import {
   getHumanPhysiologyProfile,
 } from './race_config.js';
 import {
+  buildSexualityRegistryGuideLines,
+  normalizeSexualityState,
+} from './sexuality_config.js';
+import {
   DEFAULT_WARDROBE_PREP_PROMPT,
   buildRecentMessages,
   createDefaultFemaleState,
@@ -758,6 +762,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '4. 既有孩子记录：children',
     '5. 初登场即怀孕：pregnant.pregnantDays、pregnant.fetusesCount、pregnant.fetuses',
     '6. 文字描述栏位：descriptions',
+    `${includeBreedingPsychology ? 7 : 6}. 性爱观与癖好画像：sexuality`,
     '如果资料不足，可以省略字段或给 null；不要为了凑完整而编造。',
     '以下字段定义、参数说明、注意事项与示例，均视为必要规则：',
     '【1. 角色基础注册】',
@@ -839,7 +844,9 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     String(guides.normalDescription || DEFAULT_REGISTRY_DESCRIPTION_GUIDES.normalDescription),
     '[pregnantDescription]',
     String(guides.pregnantDescription || DEFAULT_REGISTRY_DESCRIPTION_GUIDES.pregnantDescription),
-    `【${includeBreedingPsychology ? 7 : 6}. 角色补充设定】`,
+    `【${includeBreedingPsychology ? 7 : 6}. 性爱观与癖好画像】`,
+    ...buildSexualityRegistryGuideLines(),
+    `【${includeBreedingPsychology ? 8 : 7}. 角色补充设定】`,
     customNotes ? customNotes : '无',
     '若提供了角色补充设定，必须优先视为该角色已明确声明的特征，并在推演、注册与备装相关字段中如实体现；不要忽略，也不要擅自扩写超出原意的内容。',
     '注意：未怀孕角色不要硬填 pregnantDescription；描述内容应遵守旧系统文字栏位语义，不要换行。',
@@ -880,6 +887,13 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '      "naturalBirthExperience": 0,',
     '      "surgicalBirthExperience": 0,',
     '      "miscarriageExperience": 0',
+    '    },',
+    '    "sexuality": {',
+    '      "intimacyNeed": "string",',
+    '      "initiative": "string",',
+    '      "varietyTaste": "string",',
+    '      "contraceptionStyle": "string",',
+    '      "note": "string"',
     '    },',
     '    "psychology": {',
     '      "mens": {',
@@ -943,7 +957,6 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     .replace('6. 文字描述栏位：descriptions', '5. 文字描述栏位：descriptions')
     .replace('【4. 既有孩子记录】', '【3. 既有孩子记录】')
     .replace('【5. 初登场即怀孕】', '【4. 初登场即怀孕】')
-    .replace('【5.1 妊娠變速类补充设定', '【4.1 妊娠變速类补充设定')
     .replace('【6. 文字描述栏位】', '【5. 文字描述栏位】');
 }
 
@@ -1201,6 +1214,9 @@ function sanitizeRegistryProfile(profile, baseProfile) {
     const psychology = sanitizePsy(profile.psychology);
     if (psychology) sanitized.psychology = psychology;
   }
+
+  // 性爱观画像：枚举键白名单归一，未知键丢弃（normalizeSexualityState 内部处理）
+  if (profile.sexuality !== undefined) sanitized.sexuality = normalizeSexualityState(profile.sexuality);
 
   if (profile.children !== undefined) sanitized.children = sanitizeChildren(profile.children);
 
