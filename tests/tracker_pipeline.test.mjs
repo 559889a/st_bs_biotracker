@@ -22,7 +22,7 @@ function makeCharacter(name, overrides = {}) {
         ...overrides.base,
       },
       bio: {},
-      metabolism: { excretion: 20, hunger: 30, sleep: 10, milk: 5, odor: 10, companionship: 15 },
+      metabolism: { excretion: 20, hunger: 30, sleep: 10, milk: 5, companionship: 15 },
       descriptions: { normalDescription: '外貌|黑发碧眼;;', pregnantDescription: '' },
       diary: [],
       notify: {},

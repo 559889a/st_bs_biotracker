@@ -21,7 +21,7 @@ function makeCharacter(name, overrides = {}) {
       },
       bio: { birthDifficulty: 1, breedTolerance: 1, recoveryDays: 56, lactationDays: 45, menstrualLengthRatio: 1 },
       immune: {},
-      metabolism: { excretion: 0, hunger: 0, sleep: 0, milk: 0, odor: 0, companionship: 0 },
+      metabolism: { excretion: 0, hunger: 0, sleep: 0, milk: 0, companionship: 0 },
       experience: {},
       children: [],
       notify: {},
@@ -44,7 +44,7 @@ function makeLactating(name, overrides = {}) {
 
 function makeFetus(overrides = {}) {
   return {
-    fathers: '父', provider: null, race: '人类', fatherRace: '人类',
+    fathers: '父', race: '人类', fatherRace: '人类',
     gender: '女', embryoType: '胎生', weight: 1, tendencyAngle: 0, affinity: 0,
     ...overrides,
   };

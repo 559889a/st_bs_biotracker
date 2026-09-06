@@ -754,13 +754,6 @@ function ensureEmbryoMetadata(pregnant) {
     fetus.embryoId = id;
     used.add(id);
   }
-  for (const fetus of fetuses) {
-    fetus.fusionCheckedWith = [...new Set(
-      (Array.isArray(fetus?.fusionCheckedWith) ? fetus.fusionCheckedWith : [])
-        .map(Number)
-        .filter((id) => Number.isInteger(id) && id > 0 && id !== fetus.embryoId),
-    )];
-  }
   return fetuses;
 }
 
@@ -768,7 +761,6 @@ function createSimpleFetus(profile, sperm, cycleStage) {
   const gender = deriveFetusGender();
   return {
     embryoId: null,
-    fusionCheckedWith: [],
     tags: [],
     fathers: String(sperm?.male || '未知'),
     race: '人类',
@@ -1153,14 +1145,7 @@ function attemptFertilization(profile, { deltaDays, stage, name, notify, chanceF
   return eggs;
 }
 
-/**
- * 把新胚胎标成异期胎：记下受精当下的共用时钟、标为待着床、按落后进度打胎重折扣。
- *
- * 胎重折扣取 (1 − 落后 / 280)²。平方是因为生长亏损是复利而不是等差：
- * 线性版本在视窗上限只掉到 0.70，平方版本落到 0.49，符合「落后一整个孕早期
- * 大约只有一半重」的直觉。这是乘在 getConceptionWeight 既有的四个乘数之上，
- * 种族混血偏移（weightRatio）照常生效；两者都不利时会撞到 0.33 的地板。
- */
+/** 处理自然周期内的受精与着床（孕期受精闸门已随纯爱化关闭）。 */
 function processSimpleConception(profile, tick, notify, name) {
   const base = profile.base || {};
   const pregnant = profile.pregnant || {};
@@ -1175,8 +1160,7 @@ function processSimpleConception(profile, tick, notify, name) {
   const perimenopauseFertilityFactor = getPerimenopauseFertilityFactor(profile);
 
   if (allowsNaturalConception) {
-    // 一次性排出本周期的份额：按天累加会让长排卵期窗口把卵数堆到上限，
-    // 而取 min 封顶又会把高潮诱发排卵已经排出的卵砍掉
+    // 一次性排出本周期的份额：按天累加会让长排卵期窗口把卵数堆到上限
     if (stage === '排卵期' && fullDays > 0 && !(profile.cooldown || {}).naturalOvulationUsed) {
       base.eggs = clampNumber(base.eggs, 0, 99, 0) + getNaturalOvulationTotal(profile);
       profile.cooldown = { ...(profile.cooldown || {}), naturalOvulationUsed: true };
@@ -4059,8 +4043,8 @@ function applyDebugInjectPregnancy(chatState, args) {
   const rawFatherList = fatherInput
     ? fatherInput.split(',').map((item) => String(item || '').trim()).filter(Boolean)
     : [];
-  if (rawFatherList.length > 1 && rawFatherList.length !== fetusCount) {
-    return { applied: false, message: `bsDebugInjectPregnancy skipped for ${female}: fathers count must be 1 or match fetusCount.` };
+  if (rawFatherList.length > 1) {
+    return { applied: false, message: `bsDebugInjectPregnancy skipped for ${female}: fathers count must be 1.` };
   }
 
   const allowedGenderMap = {
@@ -4079,7 +4063,7 @@ function applyDebugInjectPregnancy(chatState, args) {
   const fetuses = [];
   for (let index = 0; index < fetusCount; index += 1) {
     const spermSeed = {
-      male: rawFatherList.length === 0 ? '未知' : (rawFatherList.length === 1 ? rawFatherList[0] : rawFatherList[index]),
+      male: rawFatherList.length === 0 ? '未知' : rawFatherList[0],
       race: '人类',
       derivedType: null,
     };

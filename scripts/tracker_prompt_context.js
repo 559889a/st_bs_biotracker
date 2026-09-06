@@ -37,7 +37,7 @@ export const TRACKER_VARIABLE_GUIDE_PROMPT = [
   '[pregnant]',
   '- pregnant 只会在已有 fetuses、妊娠阶段、产兆前驱/产程、产后恢复发送；幕外角色发送时只保留少量 pregnant 摘要，并用 fetusesCount 表示胎儿数量。',
   '- pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/本族等价周期起点计算的孕周天数。',
-  '- effectivePregnantDays: 真正计入胎儿发育与阶段推进的有效孕龄天数；当妊娠被冻结时，它可以停在原地而 pregnantDays 继续增加。',
+  '- effectivePregnantDays: 真正计入胎儿发育与阶段推进的有效孕龄天数。',
   '- laborHours / effectiveLaborHours / laborPhase / laborFetusIndex / laborPain 仅在产兆前驱或正式产程期间发送；产后恢复不再表示分娩疼痛。',
   '- laborHours: 当前产程内部阶段已消耗的实际时长。',
   '- effectiveLaborHours: 真正推动当前产程内部阶段前进的有效时长。',

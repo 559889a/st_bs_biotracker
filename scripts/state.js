@@ -491,7 +491,7 @@ export function isPostMenopause(profile = {}) {
 /** 年龄段的月经阶段校正：返回 null（照常）或应强制进入的阶段。 */
 function resolveAgeMenstrualOverride(profile = {}, currentStage = '') {
   const isMenstrualStage = MENSTRUAL_STAGES.includes(currentStage);
-  // 妊娠/产程/哺乳/回归等真实状态与年龄判定无关，只在「周期」上覆盖
+  // 妊娠/产程/哺乳等真实状态与年龄判定无关，只在「周期」上覆盖
   if (!isMenstrualStage && currentStage !== '无经期') return null;
   if (isPreMenarche(profile)) return '无经期';
   if (isPostMenopause(profile)) return '停经';
@@ -581,7 +581,7 @@ export function syncCharacterStageFromProfile(characterState) {
   }
 
   // 年龄→经期强制：初潮前的月经/无经期 → 无经期；到停经年龄 → 停经。
-  // 只覆盖「周期」类阶段——正在妊娠/哺乳/回归的角色不受影响。
+  // 只覆盖「周期」类阶段——正在妊娠/哺乳的角色不受影响。
   const ageOverride = resolveAgeMenstrualOverride(profile, currentStage);
 
   if (
@@ -720,7 +720,6 @@ export function createDefaultFemaleState(name = '') {
     initialized: false,
     profile: {
       cooldown: {
-        orgasmOvulationUsed: false,
         naturalOvulationUsed: false,
         pregnancyPressureWarning: false,
         psychologyUpdateUsed: false,
@@ -1545,7 +1544,6 @@ function createSnapshotCharacterBaseline(name = '') {
     initialized: false,
     profile: {
       cooldown: {
-        orgasmOvulationUsed: false,
         naturalOvulationUsed: false,
         pregnancyPressureWarning: false,
         psychologyUpdateUsed: false,

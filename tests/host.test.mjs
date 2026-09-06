@@ -525,9 +525,9 @@ test('middle-pregnancy training passes talent to one randomly selected fetus thr
   mother.initialized = true;
   mother.profile.base.stage = '孕中期';
   mother.profile.pregnant.fetuses = [
-    { fathers: 'Bob', provider: null, race: '人类', gender: '女', embryoType: '胎生', weight: 1.25, affinity: 50 },
-    { fathers: 'Bob', provider: null, race: '人类', gender: '男', embryoType: '胎生', affinity: -25 },
-    { fathers: 'Bob', provider: null, race: '人类', gender: '女', embryoType: '胎生', affinity: 0 },
+    { fathers: 'Bob', race: '人类', gender: '女', embryoType: '胎生', weight: 1.25, affinity: 50 },
+    { fathers: 'Bob', race: '人类', gender: '男', embryoType: '胎生', affinity: -25 },
+    { fathers: 'Bob', race: '人类', gender: '女', embryoType: '胎生', affinity: 0 },
   ];
   mother.profile.pregnant.fetusesCount = 3;
   chatState.characters.Alice = mother;

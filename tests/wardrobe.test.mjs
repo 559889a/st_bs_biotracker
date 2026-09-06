@@ -294,7 +294,7 @@ test('postpartum pregFit pressure declines linearly with recovery progress', () 
 });
 
 test('pregFit stays null outside the wear-fit window', () => {
-  for (const stage of ['卵泡期', '假孕期']) {
+  for (const stage of ['卵泡期', '哺乳期']) {
     const state = makePregnancyState(stage, 3);
     applyToolCall(state, { name: 'bsChangeOutfit', arguments: { female: '艾拉', mainItemId: 1 } });
     assert.equal(state.characters['艾拉'].profile.outfit.pregFit, null, stage);

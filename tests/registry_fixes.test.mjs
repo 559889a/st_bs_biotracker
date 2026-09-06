@@ -187,13 +187,13 @@ test('model-provided fetus race normalizes to human regardless of input', () => 
       pregnant: {
         pregnantDays: 140,
         fetusesCount: 1,
-        fetuses: [{ fathers: '父', provider: null, race: '兽耳族-猫又x蜥蜴人', gender: '女', embryoType: '胎生' }],
+        fetuses: [{ fathers: '父', race: '兽耳族-猫又x蜥蜴人', gender: '女', embryoType: '胎生' }],
       },
       bio: {},
       immune: {},
       experience: {},
       descriptions: {},
-      metabolism: { excretion: 10, hunger: 10, sleep: 10, milk: 10, odor: 10, companionship: 10 },
+      metabolism: { excretion: 10, hunger: 10, sleep: 10, milk: 10, companionship: 10 },
     },
   };
   applyRegistryResult(chatState, result);

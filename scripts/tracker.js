@@ -463,8 +463,7 @@ function shouldSendPregnantState(base = {}, pregnant = {}) {
     || PREGNANCY_STAGES.includes(stage)
     || stage === '产兆前驱'
     || LABOR_STAGES.includes(stage)
-    || stage === '产后恢复'
-    || stage === '假孕期';
+    || stage === '产后恢复';
 }
 
 function getPromptFacingMetabolismSymptoms(pregnant = {}) {

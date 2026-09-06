@@ -16,7 +16,7 @@ function makeCharacter(name, overrides = {}) {
       pregnant: { pregnantDays: 0, effectivePregnantDays: 0, fetusesCount: 0, fetuses: [], fetalEnergyDrain: 0 },
       bio: { ...defaultBio, ...(overrides.bio || {}) },
       immune: {},
-      metabolism: { excretion: 0, hunger: 0, sleep: 0, milk: 0, odor: 0, companionship: 0 },
+      metabolism: { excretion: 0, hunger: 0, sleep: 0, milk: 0, companionship: 0 },
       experience: { ...(overrides.experience || {}) },
       children: [],
       notify: {},

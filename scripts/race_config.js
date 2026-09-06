@@ -13,7 +13,6 @@ export const HUMAN_PHYSIOLOGY = Object.freeze({
   birthDifficulty: 1,
   breedTolerance: 1,
   impregnationDifficulty: 1,
-  orgasmOvulationAmount: 1,
   recoveryDays: 56,
 });
 

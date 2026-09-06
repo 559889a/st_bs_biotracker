@@ -1052,7 +1052,6 @@ function sanitizePregnant(value) {
           weight: Number.isFinite(Number(item.weight)) ? clampNumber(item.weight, 0.33, 3.0, 1.0) : undefined,
           tendencyAngle: Number.isFinite(Number(item.tendencyAngle)) ? clampNumber(item.tendencyAngle, 0, 360, 0) : undefined,
           affinity: Number.isFinite(Number(item.affinity)) ? clampNumber(item.affinity, -50, 50, 0) : undefined,
-          // 只放行目录内的标签，支撑栏位在 normalizeRegisteredFetusTags 里对齐。
           talents: normalizeTalentList(item.talents ?? item.inheritedTalents),
         };
       })
@@ -1101,8 +1100,6 @@ function normalizeRegisteredPregnancy(profile) {
   const gestationSpeed = clampNumber(getGestationEffectiveSpeed(profile), 0.1, 20, 1.0);
   pregnant.effectivePregnantDays = Math.max(1, pregnant.pregnantDays * gestationSpeed);
   pregnant.amnionDurability = 100;
-  // 必须排在 effectivePregnantDays 算出来之后：受精点要夹进这次妊娠的范围，
-  // 揭晓与否也要拿它跟门槛比
 
   const bio = profile.bio || {};
   const motherBreedTolerance = clampNumber(bio.breedTolerance, 0.1, 100, 1.0);

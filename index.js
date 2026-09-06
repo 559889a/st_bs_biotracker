@@ -3195,7 +3195,7 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
     ? Math.round(Math.max(0, Math.min(100, (Number(viewModel.overview.stageProgress.value) / Number(viewModel.overview.stageProgress.max)) * 100)))
     : 0;
 
-  const phaseOptions = ['卵泡期', '排卵期', '黄体期', '月经期', '假孕期', '产后恢复', '哺乳期'].map(phase =>
+  const phaseOptions = ['卵泡期', '排卵期', '黄体期', '月经期', '产后恢复', '哺乳期'].map(phase =>
     `<option value="${phase}"${currentStage === phase ? ' selected' : ''}>${phase}</option>`
   ).join('');
 
@@ -6081,12 +6081,10 @@ async function ensureModal(ctx) {
       updateMainFlowPrompt(ctx);
       // 角色已经注册进去了，这份推演草稿才算用完，可以清空
       clearBreedingInferenceDraftFor(character.name);
-      setRegisterStatus([
-        breedingInference
-          ? `注册完成：${character.name}（已套用繁育推演）。可继续备装或写日记。`
-          : `注册完成：${character.name}。可继续备装或写日记。`,
-        missingSpecial,
-      ].filter(Boolean).join(' '));
+      // v0.12.0 移除特殊胎儿来源时删掉了 missingSpecial 的定义，这里只剩悬空引用
+      setRegisterStatus(breedingInference
+        ? `注册完成：${character.name}（已套用繁育推演）。可继续备装或写日记。`
+        : `注册完成：${character.name}。可继续备装或写日记。`);
       globalThis.toastr?.success?.(`[BS BioTracker] 已注册 ${character.name}`);
     } catch (error) {
       console.error('[BS BioTracker] runRegistry failed', error);
