@@ -386,6 +386,16 @@ export function normalizeCharacterPsychologyState(characterState) {
     delete metabolism.urine;
     delete metabolism.stool;
   }
+  // v0.12.0 删高潮诱发排卵：注册模型常照旧档案把这两个死键填回 bio/cooldown，
+  // 引擎已完全不读它们——读/写路径统一剥掉，免得每次重注册又复活。
+  const bio = characterState.profile.bio;
+  if (bio && typeof bio === 'object' && !Array.isArray(bio)) {
+    delete bio.orgasmOvulationAmount;
+  }
+  const cooldown = characterState.profile.cooldown;
+  if (cooldown && typeof cooldown === 'object' && !Array.isArray(cooldown)) {
+    delete cooldown.orgasmOvulationUsed;
+  }
   const pregnant = characterState.profile.pregnant;
   if (pregnant && pregnant.acceleration === undefined) {
     pregnant.acceleration = null;

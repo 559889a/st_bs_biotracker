@@ -930,3 +930,12 @@ test('TauriTavern handle() throwing on the welcome screen degrades to the fallba
   const ctx = { extensionSettings: {} };
   assert.equal(await host.resolveHostChatId(ctx), 'char:solo');
 });
+
+test('normalize 读/写路径剥掉 v0.12 复活的死键（orgasmOvulation*）', () => {
+  const c = state.createDefaultFemaleState('A');
+  c.profile.bio.orgasmOvulationAmount = 1;
+  c.profile.cooldown.orgasmOvulationUsed = false;
+  const out = state.normalizeCharacterPsychologyState(c);
+  assert.equal('orgasmOvulationAmount' in out.profile.bio, false, 'bio 死键应被剥离');
+  assert.equal('orgasmOvulationUsed' in out.profile.cooldown, false, 'cooldown 死键应被剥离');
+});

@@ -1,6 +1,15 @@
 # Changelog
 
-## v0.14.7（文档与设置页文字收尾）
+## v0.14.8（引擎侧剥除死键，杜绝重注册复活）
+
+- 注册模型常照旧档案把 v0.12.0 已删的 orgasmOvulationAmount / orgasmOvulationUsed
+  填回 bio/cooldown，之前靠手动摘除、每次重注册又复活。改为在
+  normalizeCharacterPsychologyState 读/写路径统一剥离——历史档案自动自净，
+  注册结果也不可再生。
+- 新增回归测试；测试 277 全绿。
+
+
+文档与设置页文字收尾）
 
 - 设置页技能名示例 NTR 改为中性示例；"不限制發送"繁体改简体；
   注册状态默认文案与运行时代码统一（角色追踪）。
