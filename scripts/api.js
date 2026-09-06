@@ -1145,7 +1145,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
         responseText,
         requestText,
       });
-      return { response, responseText, requestText, format: fmt };
+      return { response, responseText, requestText, format: fmt, transport };
     } catch (error) {
       traceRequestToUi('POST', upstreamUrl, 0, transport);
       logApiDebug(`error:${attempt}`, {
@@ -1165,6 +1165,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
   let result = await postBody(body, 'primary');
   let response = result.response;
   let responseText = result.responseText;
+  let transport = result.transport || 'direct';
   let errorText = response.ok ? '' : responseText;
   const isResponses = result.format === API_FORMATS.OPENAI_RESPONSES;
   const isClaude = result.format === API_FORMATS.CLAUDE_MESSAGES;
@@ -1185,6 +1186,7 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
     result = await postBody(fallbackBody, 'without_response_format');
     response = result.response;
     responseText = result.responseText;
+    transport = result.transport || transport;
     errorText = response.ok ? '' : responseText;
   }
 
@@ -1197,17 +1199,30 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
     result = await postBody(minimalBody, 'minimal');
     response = result.response;
     responseText = result.responseText;
+    transport = result.transport || transport;
     errorText = response.ok ? '' : responseText;
   }
 
   if (!response.ok) {
     throw new Error(`API ${response.status}［实际请求: ${getApiUrlForFormat(apiBase, result.format)}］: ${sanitizeErrorText(errorText)}`);
   }
+  // TauriTavern 的 generate 路由在上游失败时回 HTTP 200 + 一条伪 completion
+  // （content 形如「[API Error] …」）。不拦下来，这段错误文本会被当成模型输出
+  // 送进 JSON 解析与纠错重试，真正的失败原因被吞。
+  const proxyErrorBody = extractHostProxyErrorBody(responseText);
+  if (proxyErrorBody) {
+    throw new Error(`宿主代理上游错误（${transport}）: ${sanitizeErrorText(proxyErrorBody)}。请检查 API 连通性；TauriTavern 后端直连可能到不了需要代理的渠道。`);
+  }
   try {
     const parsed = JSON.parse(responseText);
     if (isResponses) return normalizeResponsesData(parsed);
     if (isClaude) return normalizeClaudeData(parsed);
     if (isGemini) return normalizeGeminiInteractionsData(parsed);
+    // TT 伪错误 completion：id 带 tauritavern-error 前缀
+    if (typeof parsed?.id === 'string' && parsed.id.startsWith('tauritavern-error')) {
+      const text = String(parsed?.choices?.[0]?.message?.content || '');
+      throw new Error(`宿主代理上游错误（${transport}）: ${sanitizeErrorText(text)}`);
+    }
     return parsed;
   } catch (error) {
     logApiDebug('parse_error', {
@@ -1219,11 +1234,27 @@ async function requestChatCompletion(apiBase, settings, body, runContext = {}) {
   }
 }
 
+/**
+ * TauriTavern 的 /status 路由在上游失败时回 HTTP 200 + {error:true, message:…}，
+ * 不是 4xx/5xx。不识别它就会把上游真实错误吞掉，还得不到直连回退。
+ * @returns {string} 上游错误消息，非错误响应返回空串
+ */
+function extractHostProxyErrorBody(responseText) {
+  try {
+    const data = JSON.parse(responseText);
+    if (data && typeof data === 'object' && data.error === true) {
+      return String(data.message || data.user_message || '').trim();
+    }
+  } catch {}
+  return '';
+}
+
 export async function fetchModelList(settings) {
   const apiBase = getApiBase(settings);
   if (!apiBase) throw new Error('请先填写 API Base URL');
   let response;
   let responseText = '';
+  let hostProxyErrorBody = '';
   const url = `${apiBase}/models`;
   assertSafeDirectApiBase(apiBase);
   const useHostProxy = shouldUseHostProxy(url);
@@ -1236,6 +1267,14 @@ export async function fetchModelList(settings) {
       } catch (error) {
         proxyError = error;
         console.warn('[BS BioTracker] host proxy model list failed, trying direct', error);
+      }
+      // TT 用 200 + error:true 报上游失败：视同代理失败，走直连回退
+      if (!proxyError && response?.ok) {
+        hostProxyErrorBody = extractHostProxyErrorBody(responseText);
+        if (hostProxyErrorBody) {
+          console.warn('[BS BioTracker] host proxy model list returned upstream error, trying direct:', hostProxyErrorBody);
+          proxyError = new Error(hostProxyErrorBody);
+        }
       }
       if (proxyError || (!response.ok && shouldFallbackFromHostProxy(responseText, response.status))) {
         transport = proxyError ? 'direct-after-proxy-error' : `direct-after-proxy-${response.status}`;
@@ -1250,10 +1289,12 @@ export async function fetchModelList(settings) {
     traceRequestToUi('GET', url, response?.status, transport);
   } catch (error) {
     traceRequestToUi('GET', url, 0, transport);
-    throw new Error(`模型列表连接失败（${transport}）。请检查 Base URL / API Key；也可手动填写模型名称后直接使用追踪/注册。原始错误: ${String(error?.message || error)}`);
+    const upstream = hostProxyErrorBody ? `（宿主代理上游错误: ${sanitizeErrorText(hostProxyErrorBody)}）` : '';
+    throw new Error(`模型列表连接失败（${transport}）。请检查 Base URL / API Key；也可手动填写模型名称后直接使用追踪/注册。${upstream} 原始错误: ${String(error?.message || error)}`);
   }
   if (!response.ok) {
-    throw new Error(`模型列表请求失败 ${response.status}（${transport}）: ${sanitizeErrorText(responseText)}。如果此 API 不支持 /models，可手动填写模型名称。`);
+    const upstream = hostProxyErrorBody ? `（宿主代理上游错误: ${sanitizeErrorText(hostProxyErrorBody)}）` : '';
+    throw new Error(`模型列表请求失败 ${response.status}（${transport}）${upstream}: ${sanitizeErrorText(responseText)}。如果此 API 不支持 /models，可手动填写模型名称。`);
   }
   let data;
   try {
@@ -1276,7 +1317,15 @@ export async function fetchModelList(settings) {
       : String(item?.id || item?.name || item?.model || '').trim()))
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
-  if (models.length === 0) throw new Error('API 有响应，但没有返回可用模型；可手动填写模型名称。');
+  if (models.length === 0) {
+    // 直连成功拿到 200 但列表为空——TT 的 status 端点永远回 {data:[]}
+    // 且上游错误也走 200，把 TT 消息带上，别只说「没有返回可用模型」
+    const upstream = extractHostProxyErrorBody(responseText);
+    if (upstream) {
+      throw new Error(`宿主代理上游错误（${transport}）: ${sanitizeErrorText(upstream)}。如果 API 或网络需要代理，TauriTavern 后端直连可能到不了；可手动填写模型名称后直接使用追踪/注册。`);
+    }
+    throw new Error('API 有响应，但没有返回可用模型；可手动填写模型名称。');
+  }
   return models;
 }
 

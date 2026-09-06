@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14.1（修复：TauriTavern 上无法拉取模型）
+
+- **根因**：TauriTavern 的 `/api/backends/chat-completions/status` 与 `generate`
+  路由在上游失败时**仍回 HTTP 200**——status 回 `{error:true, message:…,
+  data:{data:[]}}`，generate 回一条 id 为 `tauritavern-error-*` 的伪 completion。
+  插件把 200 当成功：status 得到空列表后抛「没有返回可用模型」（上游真实
+  错误被吞、也不触发直连回退，回退只挂在非 2xx/401/403/404/405/5xx 上）；
+  generate 的错误文本则被当成模型输出送进 JSON 解析与纠错重试。
+- **修复**（`scripts/api.js`）：
+  - 识别 200 + `error:true` 响应体 → 视同代理失败，走既有的直连回退；
+    直连也失败时把 TT 带回的上游错误消息透传到 UI（「宿主代理上游错误: …」）。
+  - 识别 TT 伪错误 completion（`tauritavern-error-*` id）→ 直接抛错并透传
+    `[API Error]` 文本，不再进入解析流程。
+  - `postBody` 把 `transport` 随结果带出，两条错误消息都能标注实际传输路径。
+- 测试 274 全绿（`host_proxy_csrf.test.mjs` 新增 3 例：status 200-with-error
+  回退+透传、直连成功拿到模型、伪 completion 不当作模型输出）。
+
 ## v0.14.0（性爱观与癖好画像）
 
 ### 新增 `profile.sexuality`（慢层特质）
