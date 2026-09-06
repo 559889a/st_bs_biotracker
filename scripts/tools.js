@@ -355,7 +355,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsDrainSperm',
-    description: '让角色主动排出体内部分或全部精液残留，按当前各来源比例一并减少。用于角色主动清洗、灌洗或使用道具排出。注意：受精是在每次时间推进时用当下仍存在的精液判定，清空后这次性交不再有受孕机会——若剧情只是洗澡沐浴、角色并不打算避孕，不要调用本工具，残留本来就会自行衰减。',
+    description: '让角色主动排出体内残留的精液，可用于主动清洗、灌洗或使用道具排出。amount 为排出量；体内只有一名来源，排空即不再有受孕机会。注意：受精是在每次时间推进时用当下仍存在的精液判定，清空后这次性交不再有受孕机会——若剧情只是洗澡沐浴、角色并不打算避孕，不要调用本工具，残留本来就会自行衰减。',
     input_schema: {
       type: 'object',
       properties: {
@@ -368,7 +368,7 @@ export const TOOL_DEFINITIONS = Object.freeze([
   },
   {
     name: 'bsSetMenstrualPhases',
-    description: '直接设置月经相关阶段，用于催情、药物、外力或剧情推进。'
+    description: '直接设置月经相关阶段，用于剧情推进或药物、作息等外部影响。'
       + 'stage 只接受这几个值：卵泡期、排卵期、黄体期、月经期、产后恢复、哺乳期；其他值（含妊娠阶段、围绝经期晚期与停经）一律拒绝。'
       + '停经与围绝经期晚期是年龄决定的永久阶段，无法用本工具切出——若剧情需要重启周期（激素治疗等），请由用户在完整变量页调整 bio.menopauseAge。'
       + '哺乳期可留精但不会排卵或受孕（哺乳期闭经）；从哺乳期切走视为强制断奶。'
@@ -701,7 +701,7 @@ function getConceptionWeight(stage, gender, weightRatio = 1.0) {
   return Math.max(0.33, Math.min(3.0, Number(baseWeight * fluctuation * sexMultiplier * weightRatio)));
 }
 
-/** 有效胎儿（历史兼容：过滤掉旧存档里待著床的异期胚胎） */
+/** 有效胎儿（历史兼容：过滤掉旧存档里待着床的异期胚胎） */
 function isImplantedFetus(fetus) {
   return Boolean(fetus) && !fetus.pendingImplantation;
 }
@@ -714,7 +714,7 @@ function getImplantedFetuses(profile) {
 /**
  * 从已着床的胎儿里随机挑一个，回传它在原阵列里的索引；没有可挑的回 -1。
  * 不能改成先过滤再挑——胎教与母胎互动最后都会 pregnant.fetuses = fetuses
- * 整批写回，过滤过的阵列会把待著床的胚胎直接删掉。
+ * 整批写回，过滤过的阵列会把待着床的胚胎直接删掉。
  */
 function pickImplantedFetusIndex(fetuses) {
   const eligible = [];
@@ -1189,7 +1189,7 @@ function processSimpleConception(profile, tick, notify, name) {
         pregnant.fetusesCount = 0;
         pregnant.fetalEnergyDrain = 0;
         base.fertilizationDays = 0;
-        notify.secondly = `${name}因身体虚弱，胚胎著床失败`;
+        notify.secondly = `${name}因身体虚弱，胚胎着床失败`;
       } else {
         const obstetricPregnantDays = base.fertilizationDays + getObstetricPregnancyOffsetDays(profile);
         const gestationSpeed = clampNumber(getGestationEffectiveSpeed(profile), 0, 20, 1);
@@ -2817,7 +2817,7 @@ function applyMaternalFetalInteraction(chatState, args) {
   const cooldown = profile.cooldown || {};
   if (direction === 'maternal') {
     const selectedIndex = pickImplantedFetusIndex(fetuses);
-    if (selectedIndex < 0) return { applied: false, message: 'bsMaternalFetalInteraction skipped: 没有已著床的胎儿。' };
+    if (selectedIndex < 0) return { applied: false, message: 'bsMaternalFetalInteraction skipped: 没有已着床的胎儿。' };
     const selectedFetus = fetuses[selectedIndex];
     const maternalChangeKeys = Object.keys(changeMap);
     const maternalChange = maternalChangeKeys[randomInt(0, maternalChangeKeys.length - 1)];
@@ -2868,7 +2868,7 @@ function applyMaternalFetalInteraction(chatState, args) {
     return { applied: false, message: `bsMaternalFetalInteraction skipped for ${female}: direction=fetal requires a valid change.` };
   }
   const selectedIndex = pickImplantedFetusIndex(fetuses);
-  if (selectedIndex < 0) return { applied: false, message: 'bsMaternalFetalInteraction skipped: 没有已著床的胎儿。' };
+  if (selectedIndex < 0) return { applied: false, message: 'bsMaternalFetalInteraction skipped: 没有已着床的胎儿。' };
   const selectedFetus = fetuses[selectedIndex];
   const currentAffinity = clampNumber(selectedFetus?.affinity, -50, 50, 0);
   selectedFetus.affinity = clampNumber(currentAffinity + changeValue, -50, 50, 0);
@@ -4047,13 +4047,10 @@ function applyDebugInjectPregnancy(chatState, args) {
     return { applied: false, message: `bsDebugInjectPregnancy skipped for ${female}: fathers count must be 1.` };
   }
 
+  // 人类锁死：调试注入也只允许男/女（双性/无性随种族系统移除）
   const allowedGenderMap = {
     男: '男',
     女: '女',
-    双: '双',
-    雙: '双',
-    無: '无',
-    无: '无',
   };
   const normalizedGenderList = rawGenderList.map((item) => allowedGenderMap[item]);
   if (normalizedGenderList.some((item) => !item)) {
@@ -4146,7 +4143,7 @@ function applyDebugClearContainers(chatState, args) {
     profile.base = base;
     profile.notify = {
       ...notify,
-      secondly: `${female}体内残留精液已被调试淨空`,
+      secondly: `${female}体内残留精液已被调试净空`,
     };
     next.profile = profile;
     chatState.characters[female] = next;
@@ -4161,7 +4158,7 @@ function applyDebugClearContainers(chatState, args) {
     profile.children = [];
     profile.notify = {
       ...notify,
-      secondly: `${female}的孩子记录已被调试淨空`,
+      secondly: `${female}的孩子记录已被调试净空`,
     };
     next.profile = profile;
     chatState.characters[female] = next;
@@ -4186,7 +4183,7 @@ function applyDebugClearContainers(chatState, args) {
     profile.notify = {
       ...notify,
       firstly: `${female}进入了产后恢复`,
-      secondly: `${female}的胎儿已被调试淨空，并记录一次流产/堕胎经验`,
+      secondly: `${female}的胎儿已被调试净空，并记录一次流产/堕胎经验`,
     };
     next.profile = profile;
     chatState.characters[female] = syncCharacterStageFromProfile(next);
@@ -4195,7 +4192,7 @@ function applyDebugClearContainers(chatState, args) {
 
   profile.notify = {
     ...notify,
-    secondly: `${female}尚未着床的受精卵已被调试淨空`,
+    secondly: `${female}尚未着床的受精卵已被调试净空`,
   };
   next.profile = profile;
   chatState.characters[female] = next;

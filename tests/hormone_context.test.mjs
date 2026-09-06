@@ -351,3 +351,19 @@ test('性态度：未成年或年龄未知的角色不生成性语境行', () =>
   assert.doesNotMatch(sexSection, /无年龄/);
   assert.match(sexSection, /成年：/);
 });
+
+test('性态度：妊娠期角色即使无关系语境也拿到"舒适安全为先"兜底', () => {
+  // 回归：旧实现用 stage === '妊娠中' 判断，而 stage 实际是孕早期/产程等具体值，
+  // 兜底行从不触发——妊娠角色没有任何态度行。
+  const block = buildHormoneContextBlock({
+    existing_state: {
+      孕妇: makeCharacter('孕妇', '孕中期', 20, {
+        experience: {},
+        base: { stage: '孕中期', days: 20, age: 26 },
+      }),
+    },
+  });
+  const sexSection = block.split('[性与避孕态度]')[1] || '';
+  assert.match(sexSection, /妊娠中的性以彼此舒适与安全为先/);
+  assert.match(sexSection, /妊娠中/);
+});

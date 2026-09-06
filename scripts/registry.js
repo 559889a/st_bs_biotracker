@@ -334,8 +334,7 @@ function recordBreedingInferenceResultDebug(result, error = null) {
 
 /**
  * 提示词插值防线：剥离换行、闭合标签与控制字符——注册提示词模板内插的
- * declared_race/custom_notes/user_instruction 来自用户输入，含换行或闭合标签可破坏模板行。
- * 与 race_prompt_context.sanitizePromptText 同规则。
+ * custom_notes/user_instruction 来自用户输入，含换行或闭合标签可破坏模板行。
  */
 function sanitizePromptText(value) {
   return String(value ?? '')
@@ -374,15 +373,15 @@ export function buildBreedingInferenceSystemPrompt(settings, options = {}) {
     ...psyPregLines,
     ...psyPregBoolLines,
     '推演准则：',
-    '- mastery/cognition 主要看角色对自身生理、医学/魔法知识、经验与冷静程度。',
+    '- mastery/cognition 主要看角色对自身生理、医学（或本世界等效）知识、经验与冷静程度。',
     '- desire 主要看角色对怀孕生子的渴望或恐惧、对避孕的坚持或松懈等长期态度（即「想不想要孩子」）。',
     '- autonomy 主要看角色在亲密关系与权力互动中的主动/被动、支配/顺从倾向。',
     '- bonding 主要看母性、责任感、对胎儿的接纳或排斥，不等同于是否喜欢伴侣。',
     '- stance 主要看角色如何处理孕妇身份的社会风险、公开程度、资源调度与身份利益。',
-    '- 布林字段是当前状态判定，不属于 6x6 阶段表；必须根据角色设定、最近剧情、医疗/魔法条件与关系线索合理推断，不确定时填 false。',
+    '- 布林字段是当前状态判定，不属于 6x6 阶段表；必须根据角色设定、最近剧情、医疗条件与关系线索合理推断，不确定时填 false。',
     '- isChaste 代表当前保持贞洁取向、未发生性关系，或处于稳定单一性伴侣关系；若角色已有多对象关系、频繁性接触、被设定为非单伴侣，或资料无法确认单一关系，应填 false。',
     '- hasContraception 代表当前确有稳定生效中的避孕措施；不要因为角色“不想怀孕”就自动视为 true。',
-    '- knowsFatherSource 代表角色能明确判断或相信胎儿父源；多对象、记忆缺口、魔法混淆或刻意隐瞒时应谨慎。',
+    '- knowsFatherSource 代表角色能明确判断或相信胎儿父源；多对象、记忆缺口或刻意隐瞒时应谨慎。',
     '- hasProfessionalPrenatalCare 代表已有持续、专业、可信的产检或等价照护；一次性的民间判断或自我猜测不算 true。',
     `- stageProfiles 必须保存 6 轴 × 6 阶段的角色专属解释。每个轴都必须包含这些阶段键：${stageKeysText}。`,
     '- stageProfiles 的六个阶段只代表数值区间：0=极低或封闭，1_25=低位倾向，26_50=中低到中性，51_75=中高位倾向，76_100=高位强化，100_plus=超常或不可逆倾向。',
@@ -771,10 +770,10 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- base.vitalityLevel: 1-7，默认语义为 一推就倒(1)-身怀病弱(2)-难产体态(3)-均衡活力(4)-安产体态(5)-经过锻炼(6)-无坚不摧(7)',
     '- base.psyStressLevel: 1-7，默认语义为 情感丧失麻木不仁(1)-内向压抑冷感(2)-情绪平缓理性(3)-情绪均衡稳定(4)-情绪丰富敏感(5)-强烈波动焦躁(6)-极端情绪精神异常(7)',
     '- base.age: 角色年龄',
-    '- base.libido: 初始性欲。非妊娠上限100；妊娠後会随孕期提升，临产最后一天上限可达150。若角色开场就在发情、催情、强欲状态，可给较高值。',
-    '- base.uterinePressure: 初始宫压。非妊娠上限50；妊娠後会随进度平滑提升，臨產期上限达150。【危险警告】孕早期与孕中期前期上限极低，超过15便极易触发流产警告！除非开局正在临盆或剧烈腹痛，否则强烈建议填 0。',
+    '- base.libido: 初始性欲。非妊娠上限100；妊娠后随孕程从 100 平滑爬升，满 10 个月到达 150。若角色开场就在情欲高涨状态，可给较高值。',
+    '- base.uterinePressure: 初始宫压。非妊娠上限50；妊娠后随孕程从 50 平滑爬升，满 10 个月到达 150。宫压达到当前上限的一半（孕早期约 25-30）即进入流产/早产风险区，会持续到压力缓解。【危险警告】除非开局正在临盆或剧烈腹痛，否则强烈建议填 0。',
     '- base.latestSexDays: 距最近一次性行为经过的天数。若 experience.latestSexPartner 有意义，建议一并填写；若已超过最近一月经周期或无从判断，可为 null。',
-    '- base.sperms: 体内残留精液来源列表。适用于刚性交结束、仍有精液残留的开局；每项包含 male、value，value 建议 10-30（每天自动衰减 10）。',
+    '- base.sperms: 体内残留的精液，适用于刚结束性交、仍有残留的开局。内容为单个 {male, value}：male 是精液来源对象名称，value 建议 10-30（每天自动衰减 10）。体内同一时间只有一名来源——不要填写多个男性。',
     '- metabolism: 初始需求状态。上限皆为150，包含 excretion、hunger、sleep、milk、companionship，分别表示泄意、饿意、困意、乳意、伴意；excretion（泄意）同时包含排尿与排便需求；milk 在普通周期表示乳房胀敏或周期不适，在妊娠或产后恢复阶段也可表示泌乳需求。',
     '- pregnant.nutrition 是妊娠供养力盈余/赤字，专注参与胎儿体重/供养结算，不作为 metabolism 排解阻塞来源。',
     '注意：vitalityLevel 与 psyStressLevel 是角色内在特质等级，不根据当前疲劳、刚哭过、当下崩溃等暂时状态调整。',
@@ -823,7 +822,7 @@ export function buildRegistrySystemPrompt(settings, options = {}) {
     '- [{"name":"冬月 露花","fathers":"前夫","gender":"女","age":5}]',
     '【5. 初登场即怀孕】',
     '参数说明：',
-    '- pregnant.pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/等价周期起点计算的孕周天数；若资料写“孕8周/怀孕8周”填 56，若明确写“受孕后8周/胚胎发育8周”，需再加上等价排卵前偏移。',
+    '- pregnant.pregnantDays: 这次妊娠的孕龄天数，等同产科从末次月经/等价周期起点计算的孕周天数；若资料写“孕8周/怀孕8周”填 56，若明确写“受孕后8周/胚胎发育8周”，需再加上排卵前偏移（人类默认周期 28 天→约 14 天）。',
     '- 不要填写 pregnant.effectivePregnantDays；系统会依据孕龄自动换算有效妊娠天数。',
     '- pregnant.fetusesCount: 这次怀孕的怀胎数',
     '- pregnant.fetuses: 每个胎儿包含 fathers、gender；也可填写 weight、tendencyAngle、affinity',
@@ -1025,7 +1024,8 @@ function sanitizeChildren(value) {
 
 function sanitizeRegistrySperms(value) {
   if (!Array.isArray(value)) return [];
-  return value
+  // 单父锁死：模型若给了多名男性，只保留残留量最高的一名作为当前来源
+  const entries = value
     .filter((item) => item && typeof item === 'object')
     .map((item) => ({
       male: item.male === null ? null : String(item.male || '').trim() || null,
@@ -1034,6 +1034,9 @@ function sanitizeRegistrySperms(value) {
       value: clampNumber(item.value, 0, 9999, 0),
     }))
     .filter((item) => item.male && item.value > 0);
+  if (entries.length <= 1) return entries;
+  entries.sort((a, b) => b.value - a.value);
+  return [entries[0]];
 }
 
 function sanitizePregnant(value) {

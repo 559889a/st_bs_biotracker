@@ -172,10 +172,10 @@ export const HORMONE_PHASE_CATALOG = Object.freeze({
     psy: '情压与 cognition（对身体变化的认知）双向拉锯；mastery 被打乱，需要重新学习自己的身体。',
   },
   围绝经期晚期: {
-    summary: '围绝经期晚期（周期已紊乱）：月经越来越稀、间隔越来越长，也许几个月才来一次，也许这次就是最后一次；潮热夜汗达到顶峰，情绪如坐过山车，阴道干涩初现；对「还能不能怀孕」的答案越来越接近「不能」，对衰老与自由的感受同时涌来。',
-    mood: '过山车：潮热顶峰与情绪波动顶峰叠加；但平静期越来越长，她正在学会与「不确定」共处。',
-    behavior: '接受周期正在谢幕：卫生用品备着但不确定用不用得上；开始把注意力从「会不会来」挪回自己身上。',
-    body: '月经稀发至停、夜汗浸衣、阴道干涩初现；亲密时的润滑开始需要时间与耐心。',
+    summary: '围绝经期晚期（周期彻底紊乱）：该来的月经时来时不来、经量忽多忽少，紊乱出血段反复出现，谁也不知道哪一次才是最后一次；潮热夜汗达到顶峰，情绪如坐过山车，阴道干涩初现；对「还能不能怀孕」的答案越来越接近「不能」，对衰老与自由的感受同时涌来。',
+    mood: '过山车：潮热顶峰与情绪波动顶峰叠加；被紊乱周期反复折腾，一边盼着它彻底结束、一边又怕它真的结束。',
+    behavior: '接受周期正在谢幕：卫生用品永远备着但总说不准用不用得上；开始把注意力从「会不会来」挪回自己身上。',
+    body: '紊乱出血反复出现、夜汗浸衣、阴道干涩初现；亲密时的润滑开始需要时间与耐心。',
     psy: 'mastery 面对彻底失控的周期；desire 在波动中寻找不依赖周期的新平衡。',
   },
   停经: {
@@ -186,7 +186,7 @@ export const HORMONE_PHASE_CATALOG = Object.freeze({
     psy: 'desire 的走向由角色与关系决定，而非生理峰值；cognition 帮她把「衰老」重写成「自由」。',
   },
   无经期: {
-    summary: '周期停摆：没有月经的生理状态（用药、体质、初潮前或衰老），情绪不受周期摆动。',
+    summary: '周期停摆：没有月经的生理状态（用药、体质或初潮前），情绪不受周期摆动。',
     mood: '无周期起伏，情绪稳定于角色本身。',
     behavior: '依角色本来的性格与处境演出即可。',
     body: '无月经及相关体征。',
@@ -242,8 +242,12 @@ export function buildSexualAttitudeBlock(existingState) {
       riskLine = '哺乳期闭经，当前不会受孕（但持续断奶后周期就会恢复）';
     } else if (stage === '排卵期') {
       riskLine = '排卵期，受孕概率最高的窗口';
-    } else if (MENSTRUAL_STAGES.includes(stage) || stage === '产后恢复') {
-      riskLine = '周期内但非排卵窗口，受孕概率较低（非零）';
+    } else if (stage === '黄体期') {
+      riskLine = '黄体期，排卵已过但卵子存活期内受孕概率较低（非零）';
+    } else if (stage === '产后恢复') {
+      riskLine = '产后恢复期，排卵尚未恢复，暂不会受孕';
+    } else if (MENSTRUAL_STAGES.includes(stage)) {
+      riskLine = '非排卵期，当前无成熟卵子可受精';
     } else if (PREGNANCY_STAGES.includes(stage) || LABOR_STAGES.includes(stage) || stage === '产兆前驱') {
       riskLine = '妊娠中';
     }
@@ -255,7 +259,7 @@ export function buildSexualAttitudeBlock(existingState) {
 
     // 避孕态度推导（描述给模型看，不是硬规则）
     const attitude = [];
-    if (riskLine.includes('受孕可能几乎为零') || riskLine.includes('不会受孕') || riskLine.includes('不会真实受孕')) {
+    if (riskLine.includes('受孕可能几乎为零') || riskLine.includes('不会受孕')) {
       attitude.push('怀孕风险已不是顾虑：是否无套取决于她对这段关系的信任与卫生习惯，而非避孕');
       if (marriageMate) attitude.push(`与丈夫/伴侣${marriageMate}之间，无套内射是自然且无需商量的选择`);
     } else if (stage === '排卵期') {
@@ -273,7 +277,7 @@ export function buildSexualAttitudeBlock(existingState) {
       else if (marriageMate) attitude.push('已婚关系里，非排卵日的无套是常态');
       else attitude.push('非排卵日但无措施：她会用「安全期」说服自己，但残留的侥幸不安仍在');
     }
-    if (attitude.length === 0 && stage === '妊娠中') {
+    if (attitude.length === 0 && riskLine === '妊娠中') {
       attitude.push('妊娠中的性以彼此舒适与安全为先');
     }
 

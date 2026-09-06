@@ -1206,7 +1206,7 @@ function renderWorldbookEntryList(ctx, entries = [], { scope = 'character' } = {
 
     if (mode) {
       const badge = document.createElement('span');
-      badge.textContent = mode === 'always' ? '[常駐]' : (mode === 'keyword' ? '[關鍵字]' : `[${mode}]`);
+      badge.textContent = mode === 'always' ? '[常驻]' : (mode === 'keyword' ? '[关键字]' : `[${mode}]`);
       badge.style.fontSize = '0.8em';
       badge.style.color = 'var(--bs-bt-text-dim, #888)';
       textWrap.appendChild(badge);
@@ -3226,19 +3226,19 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
           <span class="bs-bt-track-debug-state">${isHere ? 'ON' : 'OFF'}</span>
         </button>
         <button type="button" class="bs-bt-track-debug-button" data-debug-clear="sperms">
-          <span class="bs-bt-track-debug-title">淨空精液</span>
+          <span class="bs-bt-track-debug-title">净空精液</span>
           <span class="bs-bt-track-debug-state">${Number(counts.sperms) || 0}</span>
         </button>
         <button type="button" class="bs-bt-track-debug-button" data-debug-clear="fetuses">
-          <span class="bs-bt-track-debug-title">淨空胎儿</span>
+          <span class="bs-bt-track-debug-title">净空胎儿</span>
           <span class="bs-bt-track-debug-state">${Number(counts.fetuses) || 0}</span>
         </button>
         <button type="button" class="bs-bt-track-debug-button" data-debug-clear="children">
-          <span class="bs-bt-track-debug-title">淨空孩子</span>
+          <span class="bs-bt-track-debug-title">净空孩子</span>
           <span class="bs-bt-track-debug-state">${Number(counts.children) || 0}</span>
         </button>
       </div>
-      <div class="bs-bt-track-debug-hint">淨空胎儿时，若当前已是着床后的妊娠状态，会追加一次流产/堕胎经验；尚未着床的受精卵不计入。</div>
+      <div class="bs-bt-track-debug-hint">净空胎儿时，若当前已是着床后的妊娠状态，会追加一次流产/堕胎经验；尚未着床的受精卵不计入。</div>
     </div>
     <div class="bs-bt-track-section" style="margin-top: 10px;">
       <div class="bs-bt-track-section-title">妊娠需求症状调试</div>
@@ -3274,23 +3274,23 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
       <div class="bs-bt-track-debug-hint">阻塞、快积与扩容不能作用于同一需求；设置冲突项时会自动替换原症状。</div>
     </div>
     <div class="bs-bt-track-section" style="margin-top: 10px;">
-      <div class="bs-bt-track-section-title">生理周期强制切換</div>
+      <div class="bs-bt-track-section-title">生理周期强制切换</div>
       <fieldset class="bs-bt-track-debug-form"${hasProtectedPregnancyState ? ' disabled' : ''}>
         <div class="bs-bt-track-inline-action">
           <select id="bs-bt-debug-phase-select" class="text_pole">
             ${phaseOptions}
           </select>
-          <button type="button" class="menu_button bs-bt-inline-button" data-debug-action="set-phase">执行切換</button>
+          <button type="button" class="menu_button bs-bt-inline-button" data-debug-action="set-phase">执行切换</button>
         </div>
       </fieldset>
-      <div class="bs-bt-track-debug-hint">${hasProtectedPregnancyState ? '当前角色处于妊娠/分娩状态，已禁用此操作。' : '强制切換阶段，會連帶重置階段天數與觸發狀態。'}</div>
+      <div class="bs-bt-track-debug-hint">${hasProtectedPregnancyState ? '当前角色处于妊娠/分娩状态，已禁用此操作。' : '强制切换阶段，会连带重置阶段天数与触发状态。'}</div>
     </div>
     <div class="bs-bt-track-section" style="margin-top: 10px;">
       <div class="bs-bt-track-section-title">注入胎儿并怀孕 X 天</div>
       <fieldset class="bs-bt-track-debug-form"${hasConceptionState ? ' disabled' : ''}>
         <label class="bs-bt-track-debug-field">
           <span class="bs-bt-track-debug-label">父亲名字</span>
-          <input id="bs-bt-debug-father" class="text_pole" type="text" value="${fatherValue}" placeholder="可用逗号分隔，默认当前 user" />
+          <input id="bs-bt-debug-father" class="text_pole" type="text" value="${fatherValue}" placeholder="默认当前 user" />
         </label>
         <label class="bs-bt-track-debug-field">
           <span class="bs-bt-track-debug-label">胎数</span>
@@ -3298,15 +3298,15 @@ function renderTrackDebug(viewModel, fetalTalentHtml = '') {
         </label>
         <label class="bs-bt-track-debug-field">
           <span class="bs-bt-track-debug-label">性别</span>
-          <input id="bs-bt-debug-genders" class="text_pole" type="text" value="${gendersValue}" placeholder="男/女/双/无，多胎用逗号分隔" />
+          <input id="bs-bt-debug-genders" class="text_pole" type="text" value="${gendersValue}" placeholder="男/女，多胎用逗号分隔（例：女,女）" />
         </label>
         <label class="bs-bt-track-debug-field">
-          <span class="bs-bt-track-debug-label">孕龄天数(人類等效产科孕期，0代表刚受精)</span>
+          <span class="bs-bt-track-debug-label">孕龄天数(人类等效产科孕期，0代表刚受精)</span>
           <input id="bs-bt-debug-days" class="text_pole" type="number" min="0" max="300" value="${daysValue}" />
         </label>
         <button type="button" class="menu_button" data-debug-action="inject-pregnancy">执行注入</button>
       </fieldset>
-      <div class="bs-bt-track-debug-hint">${hasConceptionState ? '当前角色已有受精或妊娠状态，已禁用此操作。' : '父亲名字、性别都可用逗号逐胎填写；填一位父亲 + 胎数 > 1 = 同父多胎；填多位父亲 = 异父妊娠。'}</div>
+      <div class="bs-bt-track-debug-hint">${hasConceptionState ? '当前角色已有受精或妊娠状态，已禁用此操作。' : '父亲为单人：留空默认当前 user，胎数 > 1 = 同父多胎（双胞胎等）。多位父亲已不支持。'}</div>
     </div>
     <div class="bs-bt-track-section" style="margin-top: 10px;">
       <div class="bs-bt-track-section-title">产兆前驱调试</div>
@@ -3483,7 +3483,7 @@ function clearSelectedTrackContainer(ctx, container) {
     },
   });
   if (!result?.applied) {
-    globalThis.toastr?.warning?.(result?.message || '[BS BioTracker] 容器淨空失败');
+    globalThis.toastr?.warning?.(result?.message || '[BS BioTracker] 容器净空失败');
     return;
   }
   recordChatStateSnapshot(ctx, chatState, { reason: `debug_clear_${container}` });
@@ -3491,7 +3491,7 @@ function clearSelectedTrackContainer(ctx, container) {
   renderStatusPanel(ctx);
   renderFullStatePage(ctx);
   const label = container === 'sperms' ? '精液' : container === 'fetuses' ? '胎儿' : '孩子';
-  globalThis.toastr?.success?.(`[BS BioTracker] 已为 ${selectedTrackName} 淨空${label}`);
+  globalThis.toastr?.success?.(`[BS BioTracker] 已为 ${selectedTrackName} 净空${label}`);
 }
 
 function clampSelectedTrackExpansionCapacity(profile) {
@@ -3658,7 +3658,7 @@ function bindDebugPanelControls(ctx, root, refresh = () => renderFullStatePage(c
       saveSettings(ctx);
       renderStatusPanel(ctx);
       renderFullStatePage(ctx);
-      globalThis.toastr?.success?.(`[BS BioTracker] 已强制将 ${selectedTrackName} 切換至 ${stage}`);
+      globalThis.toastr?.success?.(`[BS BioTracker] 已强制将 ${selectedTrackName} 切换至 ${stage}`);
     }),
   );
   root.querySelectorAll('[data-debug-action="set-blockage"]').forEach((node) =>
@@ -3901,7 +3901,7 @@ function renderStatusPanel(ctx) {
       recordChatStateSnapshot(ctx, chatState, { reason: 'debug_set_phase' });
       saveSettings(ctx);
       renderStatusPanel(ctx);
-      globalThis.toastr?.success?.(`[BS BioTracker] 已强制将 ${selectedTrackName} 切換至 ${stage}`);
+      globalThis.toastr?.success?.(`[BS BioTracker] 已强制将 ${selectedTrackName} 切换至 ${stage}`);
     }),
   );
   content.querySelectorAll('[data-debug-clear]').forEach((node) =>
@@ -6024,9 +6024,9 @@ async function ensureModal(ctx) {
     const settings = getSettings(ctx);
     const chatState = getChatState(ctx, settings);
     if (!chatState.characters?.[values.targetName]) {
-      setBreedingInferenceStatus(`尚未找到已注册角色：${values.targetName}。若这是新角色，请切到“注册”分頁按“注册当前角色”；注册会自动套用这份推演。`, true);
+      setBreedingInferenceStatus(`尚未找到已注册角色：${values.targetName}。若这是新角色，请切到“注册”分页按“注册当前角色”；注册会自动套用这份推演。`, true);
       setRegisterTab('registry');
-      globalThis.toastr?.info?.('[BS BioTracker] 新角色请用注册分頁套用推演');
+      globalThis.toastr?.info?.('[BS BioTracker] 新角色请用注册分页套用推演');
       return;
     }
     try {
