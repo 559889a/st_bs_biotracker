@@ -375,7 +375,7 @@ export function buildBreedingInferenceSystemPrompt(settings, options = {}) {
     ...psyPregBoolLines,
     '推演准则：',
     '- mastery/cognition 主要看角色对自身生理、医学/魔法知识、经验与冷静程度。',
-    '- desire 主要看角色对受孕、承接种子、繁衍使命、避孕与恐惧怀孕的长期态度。',
+    '- desire 主要看角色对怀孕生子的渴望或恐惧、对避孕的坚持或松懈等长期态度（即「想不想要孩子」）。',
     '- autonomy 主要看角色在亲密关系与权力互动中的主动/被动、支配/顺从倾向。',
     '- bonding 主要看母性、责任感、对胎儿的接纳或排斥，不等同于是否喜欢伴侣。',
     '- stance 主要看角色如何处理孕妇身份的社会风险、公开程度、资源调度与身份利益。',
