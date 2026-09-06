@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14.2（修复：欢迎页保存设置炸穿连接/保存按钮）
+
+- **根因**：未打开任何聊天（欢迎页）时，TauriTavern 的 `api.chat.current.handle()`
+  会抛 `Failed to resolve active character id` 而非返回 null。插件的
+  `getCurrentTauriChatHandle` 只防了 null 没防 throw，异常沿
+  `saveSettings → scheduleHostChatStateSave` 一路同步炸穿点击处理：
+  连接/保存按钮的第一步 `readSettingsFromForm` 永远走不完，
+  `connectAndLoadModels` 从未执行——v0.14.1 修好的代理层根本没机会跑
+  （现象：网络层零请求、状态栏纹丝不动、控制台只有一条 unhandled rejection）。
+- **修复**（`scripts/host.js`）：`getCurrentTauriChatHandle` 包 try/catch，
+  抛错视同「暂无句柄」返回 null；一处覆盖全部 4 个调用点
+  （`resolveHostChatId`、`waitForTauriChatStoreHandle` ×2、
+  `scheduleHostChatStateSave`）。`refreshHostChatView` 里的直调仅在
+  聊天已打开的流程触达，不受欢迎页影响，保持原样。
+- 测试 275 全绿（`host.test.mjs` 新增回归：handle() 抛错 →
+  `resolveHostChatId` 回退 fallback id）。
+
 ## v0.14.1（修复：TauriTavern 上无法拉取模型）
 
 - **根因**：TauriTavern 的 `/api/backends/chat-completions/status` 与 `generate`

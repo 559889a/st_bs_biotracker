@@ -287,7 +287,14 @@ function cloneHostValue(value) {
 
 function getCurrentTauriChatHandle() {
   const api = getTauriTavernApi()?.chat;
-  return typeof api?.current?.handle === 'function' ? api.current.handle() : null;
+  if (typeof api?.current?.handle !== 'function') return null;
+  try {
+    return api.current.handle();
+  } catch (error) {
+    // 欢迎页（未打开任何聊天）时 TauriTavern 的 handle() 会抛错而非返回 null；
+    // 视同「暂无句柄」，各调用方已按 null 兜底跳过。
+    return null;
+  }
 }
 
 /**

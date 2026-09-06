@@ -909,3 +909,24 @@ test('a failing list method degrades to the original read path', async () => {
   assert.equal(await state.hydrateChatStateFromHost(ctx, settings), true);
   assert.equal(getJsonCalls, 1, '列举失败不得让载入跟着失败');
 });
+
+test('TauriTavern handle() throwing on the welcome screen degrades to the fallback chat id', async () => {
+  resetGlobals();
+  // TT 欢迎页（未打开任何聊天）时 api.chat.current.handle() 会抛错而非返回 null；
+  // 调用方（saveSettings → scheduleHostChatStateSave 等）按 null 兜底，resolveHostChatId
+  // 必须回退 fallback id，否则整条保存链路一路炸穿，连接/保存按钮全部失灵。
+  globalThis.__TAURITAVERN__ = {
+    ready: Promise.resolve(),
+    api: {
+      chat: {
+        current: {
+          handle() {
+            throw new Error('Failed to resolve active character id');
+          },
+        },
+      },
+    },
+  };
+  const ctx = { extensionSettings: {} };
+  assert.equal(await host.resolveHostChatId(ctx), 'char:solo');
+});
