@@ -64,7 +64,7 @@
         base: { age: 48 },
         profile: {
           children: [
-            { id: 'g1', name: '艾拉', gender: '女', race: '精灵', fathers: '祖父', fatherRace: '精灵', age: 120, registeredAs: '艾拉', talents: [] },
+            { id: 'g1', name: '艾拉', gender: '女', race: '人类', fathers: '祖父', fatherRace: '人类', age: 26, registeredAs: '艾拉', talents: [] },
           ],
         },
       }),
@@ -75,8 +75,8 @@
           eggs: 2,
           sperms: [
             { male: '凯', race: '人类', derivedType: null, value: 24 },
-            { male: '无名旅人', race: '龙族', derivedType: '血族', value: 12 },
-            { male: '古龙', race: '龙族', derivedType: null, value: 5 },
+            { male: '无名旅人', race: '人类', derivedType: null, value: 12 },
+            { male: '古龙', race: '人类', derivedType: null, value: 5 },
           ],
         },
         profile: {
@@ -98,9 +98,9 @@
           ],
           children: [
             // 一般生育 + 已注册成角色（节点会与「长女」合并）
-            { id: 'c1', name: '长女', gender: '女', race: '精灵x人类', fathers: '凯', fatherRace: '人类', age: 18, registeredAs: '长女', talents: [] },
-            // 未注册的路人父亲，带上血统
-            { id: 'c2', name: '次子', gender: '男', race: '精灵x龙族', fathers: '无名旅人', fatherRace: '龙族', fatherDerivedType: '血族', age: 6, talents: [] },
+            { id: 'c1', name: '长女', gender: '女', race: '人类', fathers: '凯', fatherRace: '人类', age: 18, registeredAs: '长女', talents: [] },
+            // 未注册的路人父亲，仅名字可查
+            { id: 'c2', name: '次子', gender: '男', race: '人类', fathers: '无名旅人', fatherRace: '人类', age: 6, talents: [] },
           ],
           skillHistory: [{
             skillId: 1, fromLevel: 1, toLevel: 3, reason: '在连续实战中掌握了新的剑术节奏。', source: 'story', timestamp: Date.now() - 3600000,
